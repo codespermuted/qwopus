@@ -48,11 +48,16 @@ def main():
         return
 
     # Interactive mode
-    # Detect GPUs for banner (without loading model yet)
     from .gpu import detect_gpus, format_gpu_info
+    from .indexer import build_project_index
     gpus = detect_gpus()
 
     ui.print_banner(cwd, format_gpu_info(gpus))
+
+    # 프로젝트 인덱스 생성
+    index = build_project_index(cwd)
+    file_count = len([l for l in index.split("\n") if l.strip() and not l.strip().startswith("...")])
+    ui.print_info(f"프로젝트 인덱스: {file_count}개 파일 감지됨")
 
     while True:
         user_input = ui.get_user_input()

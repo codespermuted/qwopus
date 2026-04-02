@@ -85,12 +85,14 @@ def build_llama_config(gpus: list[dict]) -> dict:
 
     # 여유 VRAM에 따라 컨텍스트 크기 조정
     headroom = total_free - MIN_TOTAL_VRAM_MB
-    if headroom > 8000:
-        n_ctx = 16384
+    if headroom > 12000:
+        n_ctx = 32768
+    elif headroom > 8000:
+        n_ctx = 24576
     elif headroom > 4000:
-        n_ctx = 8192
+        n_ctx = 16384
     else:
-        n_ctx = 4096
+        n_ctx = 8192
 
     config = {
         "n_gpu_layers": -1,

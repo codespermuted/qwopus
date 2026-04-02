@@ -6,6 +6,7 @@ import re
 from typing import Callable
 
 from .engine import chat_completion, strip_thinking, get_n_ctx
+from .indexer import build_project_index
 from .models import ToolCall, ToolResult, TurnResult, UsageSummary
 from .session import Session
 from .tools import (
@@ -26,6 +27,13 @@ running commands, and answering questions about codebases.
 
 Current working directory: {cwd}
 
+# Project Index
+Below is a summary of files in the current project. Use this to navigate efficiently \
+without reading every file. Use Grep/Glob to find specific content, then FileRead only \
+what you need.
+
+{project_index}
+
 # Available Tools
 
 You can use tools by responding with a JSON block in this exact format:
@@ -45,7 +53,8 @@ When you are done and have no more tools to call, just respond with normal text.
 ## Accuracy
 - NEVER fabricate information, file contents, or tool results. If you don't know, say so.
 - ALWAYS read a file before referencing its contents. Do not guess what's in a file.
-- When searching the codebase, use Glob/Grep first. Do not assume file locations.
+- Use the Project Index above to know what files exist. Don't scan the whole project.
+- Use Grep to find specific content, then FileRead only the relevant lines (use offset/limit).
 - Verify your claims by using tools. If you say "this file has X", show it with FileRead.
 
 ## Focus
@@ -72,8 +81,10 @@ TOOL_BLOCK_RE = re.compile(r"```tool\s*\n(\{.*?\})\s*\n```", re.DOTALL)
 
 
 def build_system_prompt(cwd: str) -> str:
+    index = build_project_index(cwd)
     return SYSTEM_PROMPT_TEMPLATE.format(
         cwd=cwd,
+        project_index=index,
         tool_definitions=get_tool_definitions_for_prompt(),
     )
 
@@ -216,13 +227,13 @@ class ConversationRuntime:
 
                 ui.print_tool_result(tc.name, result.output, result.success)
 
-                # Truncate tool output for context to avoid blowing up tokens
+                # 컨텍스트 절약을 위해 도구 출력 길이 제한
                 output_for_context = result.output
-                if len(output_for_context) > 3000:
+                if len(output_for_context) > 1500:
                     output_for_context = (
-                        output_for_context[:2000]
-                        + "\n\n... (truncated) ...\n\n"
-                        + output_for_context[-800:]
+                        output_for_context[:1000]
+                        + "\n\n... (잘림 — 전체 내용이 필요하면 FileRead로 다시 읽으세요) ...\n\n"
+                        + output_for_context[-400:]
                     )
                 tool_output_parts.append(
                     f"[Tool Result: {result.name}]\n{output_for_context}"
