@@ -75,6 +75,14 @@ _register("Grep", "정규식 패턴으로 파일 내용을 검색한다.", {
     "required": ["pattern"],
 })
 
+_register("ProjectScan", "프로젝트의 모든 Python 파일에서 타겟/예측 변수, 모델 클래스 등 핵심 정보를 스캔한다. 프로젝트 전체를 파악할 때 사용.", {
+    "type": "object",
+    "properties": {
+        "path": {"type": "string", "description": "스캔할 디렉토리. 비어있으면 현재 디렉토리."},
+    },
+    "required": [],
+})
+
 
 # ── 도구 실행 ─────────────────────────────────────────────────
 
@@ -93,6 +101,8 @@ def execute_tool(call: ToolCall, cwd: str, confirm_fn=None) -> ToolResult:
             return _exec_glob(call, cwd)
         elif call.name == "Grep":
             return _exec_grep(call, cwd)
+        elif call.name == "ProjectScan":
+            return _exec_project_scan(call, cwd)
         else:
             return ToolResult(name=call.name, output=f"알 수 없는 도구: {call.name}", success=False)
     except Exception as e:
@@ -190,6 +200,13 @@ def _exec_grep(call: ToolCall, cwd: str) -> ToolResult:
     if len(lines) > 100:
         output = "\n".join(lines[:100]) + f"\n... (전체 {len(lines)}건 중 처음 100건 표시)"
     return ToolResult(name="Grep", output=output)
+
+
+def _exec_project_scan(call: ToolCall, cwd: str) -> ToolResult:
+    from .indexer import scan_project_targets
+    scan_path = call.arguments.get("path", cwd)
+    output = scan_project_targets(scan_path)
+    return ToolResult(name="ProjectScan", output=output)
 
 
 def get_tool_definitions_for_prompt() -> str:
