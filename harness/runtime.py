@@ -16,12 +16,13 @@ from .tools import (
 from . import ui
 
 # Maximum tool-use iterations per turn to prevent infinite loops
-MAX_TOOL_ROUNDS = 5
+# 도구 반복 최대 횟수 — 너무 높으면 hallucination, 너무 낮으면 복잡한 작업 불가
+MAX_TOOL_ROUNDS = 8
 
 SYSTEM_PROMPT_TEMPLATE = """\
-You are Qwopus, an AI coding assistant running locally on the user's machine.
-You help with software engineering tasks: reading code, debugging, running commands, \
-and answering questions about codebases.
+You are Qwopus, a powerful AI coding assistant running locally on the user's machine.
+You help with software engineering tasks: writing code, debugging, file manipulation, \
+running commands, and answering questions about codebases.
 
 Current working directory: {cwd}
 
@@ -39,18 +40,31 @@ When you are done and have no more tools to call, just respond with normal text.
 
 {tool_definitions}
 
-# STRICT RULES — NEVER VIOLATE THESE
+# How to behave
 
-1. ONLY do what the user explicitly asked. Do NOT add extra tasks, features, or files.
-2. NEVER create, write, or modify files unless the user specifically requests it.
-3. NEVER fabricate information. If you don't know, say so.
-4. NEVER generate code that the user didn't ask for.
-5. If asked to "explain" or "describe", ONLY read and explain — do NOT create anything.
-6. Do NOT include internal reasoning ("The user wants...", "Let me...") in your response.
-7. Be concise. Answer directly.
-8. When reading files, read only what's needed — don't read every file in the project.
-9. If a command is dangerous, explain why before running it.
-10. Stay focused on the user's question. Do NOT go off-topic.
+## Accuracy
+- NEVER fabricate information, file contents, or tool results. If you don't know, say so.
+- ALWAYS read a file before referencing its contents. Do not guess what's in a file.
+- When searching the codebase, use Glob/Grep first. Do not assume file locations.
+- Verify your claims by using tools. If you say "this file has X", show it with FileRead.
+
+## Focus
+- Match the scope of your action to what was asked:
+  - "설명해줘" / "explain" → read and explain only, do NOT create or modify files.
+  - "만들어줘" / "create" / "build" → you CAN proactively create files and code.
+  - "고쳐줘" / "fix" → read, diagnose, then fix.
+- When reading the codebase, read only the files you need. Don't read every single file.
+- Stay on topic. If the user asks about X, don't start building Y.
+- Be concise. Lead with the answer, not the reasoning.
+
+## Proactivity
+- You CAN suggest useful improvements, tools, or features if they are relevant.
+- You CAN create files when the user's request implies it (e.g. "이거 추가해줘").
+- But always make sure your suggestion is relevant to what the user is working on.
+
+## Safety
+- If a command is dangerous (rm -rf, git push --force, etc.), explain and ask first.
+- Do NOT include internal reasoning ("The user wants...", "Let me think...") in your response.
 """
 
 # Regex to extract ```tool ... ``` blocks from LLM output
@@ -65,18 +79,36 @@ def build_system_prompt(cwd: str) -> str:
 
 
 def parse_tool_calls(text: str) -> list[ToolCall]:
-    """Extract tool calls from LLM response text."""
+    """LLM 응답에서 도구 호출을 추출한다. 여러 포맷을 지원."""
     calls = []
+
+    # 1차: ```tool ``` 블록
     for match in TOOL_BLOCK_RE.finditer(text):
-        try:
-            data = json.loads(match.group(1))
-            name = data.get("tool", "")
-            args = data.get("arguments", {})
-            if name and name in TOOL_REGISTRY:
-                calls.append(ToolCall(name=name, arguments=args))
-        except (json.JSONDecodeError, KeyError):
-            continue
+        tc = _try_parse_tool_json(match.group(1))
+        if tc:
+            calls.append(tc)
+
+    # 2차: ```tool 없이 JSON만 있는 경우 (모델이 포맷을 어긴 경우)
+    if not calls:
+        for match in re.finditer(r'\{\s*"tool"\s*:\s*"(\w+)".*?\}', text, re.DOTALL):
+            tc = _try_parse_tool_json(match.group(0))
+            if tc:
+                calls.append(tc)
+
     return calls
+
+
+def _try_parse_tool_json(raw: str) -> ToolCall | None:
+    """JSON 문자열을 ToolCall로 파싱 시도."""
+    try:
+        data = json.loads(raw)
+        name = data.get("tool", "")
+        args = data.get("arguments", {})
+        if name and name in TOOL_REGISTRY:
+            return ToolCall(name=name, arguments=args)
+    except (json.JSONDecodeError, KeyError):
+        pass
+    return None
 
 
 def strip_tool_blocks(text: str) -> str:
@@ -105,6 +137,7 @@ class ConversationRuntime:
         all_tool_calls: list[ToolCall] = []
         all_tool_results: list[ToolResult] = []
         final_text = ""
+        prev_tool_sig = ""  # 반복 감지용
 
         for round_idx in range(MAX_TOOL_ROUNDS):
             # Build messages for the LLM
@@ -149,7 +182,27 @@ class ConversationRuntime:
                     stop_reason="completed",
                 )
 
-            # Execute tools and feed results back
+            # 반복 감지: 같은 도구를 같은 인자로 다시 호출하면 루프 종료
+            current_sig = str([(tc.name, tc.arguments) for tc in tool_calls])
+            if current_sig == prev_tool_sig:
+                ui.print_warning("동일한 도구 호출 반복 감지 — 루프를 종료합니다.")
+                if display_text:
+                    ui.print_response(display_text)
+                self.session.add_assistant_message(content)
+                return TurnResult(
+                    user_prompt=user_input,
+                    assistant_response=final_text.strip(),
+                    tool_calls=all_tool_calls,
+                    tool_results=all_tool_results,
+                    usage=UsageSummary(
+                        self.session.total_prompt_tokens,
+                        self.session.total_completion_tokens,
+                    ),
+                    stop_reason="completed",
+                )
+            prev_tool_sig = current_sig
+
+            # 도구 실행 및 결과 피드백
             tool_output_parts = []
             for tc in tool_calls:
                 summary = _summarize_args(tc)
