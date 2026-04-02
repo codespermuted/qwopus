@@ -1,4 +1,4 @@
-"""Interactive REPL — the main entry point."""
+"""인터랙티브 REPL — 메인 진입점."""
 from __future__ import annotations
 
 import os
@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 from .commands import handle_slash_command
+from .config import Settings
 from .runtime import ConversationRuntime
 from .session import Session
 from . import ui
@@ -16,7 +17,6 @@ def main():
     resume_id = None
     rest_args = []
 
-    # Parse known flags, collect the rest
     args = sys.argv[1:]
     i = 0
     while i < len(args):
@@ -26,38 +26,50 @@ def main():
         elif args[i] == "--resume" and i + 1 < len(args):
             resume_id = args[i + 1]
             i += 2
+        elif args[i] == "--no-stream":
+            # 스트리밍 비활성화 (디버깅용)
+            os.environ["QWOPUS_NO_STREAM"] = "1"
+            i += 1
         else:
             rest_args.append(args[i])
             i += 1
 
-    # Load or create session
+    # 설정 로드
+    settings = Settings.load()
+    if os.environ.get("QWOPUS_NO_STREAM"):
+        settings.set("ui.streaming", False)
+
+    # 세션 로드 또는 생성
     if resume_id:
         session = Session.load(resume_id)
-        ui.print_success(f"Resumed session: {session.session_id}")
+        ui.print_success(f"세션 재개: {session.session_id}")
     else:
         session = Session()
 
-    runtime = ConversationRuntime(cwd=cwd, session=session)
+    runtime = ConversationRuntime(cwd=cwd, session=session, settings=settings)
 
-    # One-shot mode: remaining args are a prompt
+    # 원샷 모드
     if rest_args:
         prompt = " ".join(rest_args)
         ui.console.print(f"[bold blue]❯[/] {prompt}\n")
         runtime.run_turn(prompt)
-        _print_usage(session)
+        _print_usage(session, settings)
         return
 
-    # Interactive mode
+    # 인터랙티브 모드
     from .gpu import detect_gpus, format_gpu_info
     from .indexer import build_project_index
     gpus = detect_gpus()
 
     ui.print_banner(cwd, format_gpu_info(gpus))
 
-    # 프로젝트 인덱스 생성
     index = build_project_index(cwd)
     file_count = len([l for l in index.split("\n") if l.strip() and not l.strip().startswith("...")])
-    ui.print_info(f"프로젝트 인덱스: {file_count}개 파일 감지됨")
+    ui.print_info(f"프로젝트 인덱스: {file_count}개 파일")
+    stream_status = "on" if settings.get("ui.streaming", True) else "off"
+    ui.print_info(f"스트리밍: {stream_status}")
+
+    auto_save = settings.get("session.auto_save_interval", 10)
 
     while True:
         user_input = ui.get_user_input()
@@ -69,7 +81,7 @@ def main():
         if not user_input:
             continue
 
-        # Shell escape: !command
+        # !셸 명령어
         if user_input.startswith("!"):
             cmd = user_input[1:].strip()
             if cmd:
@@ -80,31 +92,31 @@ def main():
                     ui.print_error(str(e))
             continue
 
-        # Slash commands
+        # /슬래시 명령어
         if user_input.startswith("/"):
             response = handle_slash_command(user_input, session, cwd)
             if response == "__EXIT__":
                 ui.console.print("[dim]Bye![/]")
                 break
             if response is not None:
-                # Commands now render their own output via rich
-                if response:  # Non-empty means legacy text to display
+                if response:
                     ui.print_command_response(response)
                 continue
-            ui.print_warning(f"Unknown command: {user_input.split()[0]}")
+            ui.print_warning(f"알 수 없는 명령어: {user_input.split()[0]}")
             continue
 
-        # Regular prompt → run turn
+        # 일반 프롬프트 → 턴 실행
         result = runtime.run_turn(user_input)
-        _print_usage(session)
+        _print_usage(session, settings)
 
-        # Auto-save periodically
-        if len(session.messages) % 10 == 0:
+        # 자동 저장
+        if auto_save and len(session.messages) % auto_save == 0:
             session.save()
 
 
-def _print_usage(session: Session):
-    """Print token usage after each turn."""
+def _print_usage(session: Session, settings: Settings):
+    if not settings.get("ui.show_token_usage", True):
+        return
     total = session.total_prompt_tokens + session.total_completion_tokens
     if total > 0:
         ui.console.print(

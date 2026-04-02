@@ -74,6 +74,23 @@ def chat_completion(messages: list[dict], max_tokens: int = 4096, temperature: f
     )
 
 
+def chat_completion_stream(messages: list[dict], max_tokens: int = 4096, temperature: float = 0.3):
+    """스트리밍 채팅 완성. 토큰 단위로 yield한다."""
+    llm = get_llm()
+    stream = llm.create_chat_completion(
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        top_p=0.9,
+        stream=True,
+    )
+    for chunk in stream:
+        delta = chunk["choices"][0].get("delta", {})
+        content = delta.get("content", "")
+        if content:
+            yield content
+
+
 def strip_thinking(text: str) -> tuple[str, str]:
     """<think>...</think> 블록과 내부 추론을 제거하고 (사고 과정, 답변)을 반환한다."""
     import re

@@ -201,6 +201,61 @@ def print_response(text: str):
     console.print()
 
 
+def stream_response(token_iter, strip_thinking_fn) -> str:
+    """스트리밍: </think> 전까지는 thinking으로 모으고, 이후부터 실시간 출력."""
+    full_text = ""
+    thinking_done = False
+    printed_header = False
+
+    for token in token_iter:
+        full_text += token
+
+        # Phase 1: </think> 나올 때까지 모으기만 (출력 안 함)
+        if not thinking_done:
+            if "</think>" in full_text:
+                # </think> 앞은 전부 thinking (모델이 <think> 없이 시작할 수 있음)
+                idx = full_text.index("</think>") + len("</think>")
+                thinking_text = full_text[:full_text.index("</think>")]
+                # <think> 태그가 있으면 제거
+                if "<think>" in thinking_text:
+                    thinking_text = thinking_text[thinking_text.index("<think>") + len("<think>"):]
+                thinking_text = thinking_text.strip()
+                if thinking_text:
+                    print_thinking(thinking_text)
+
+                # </think> 이후 답변 즉시 출력
+                answer_so_far = full_text[idx:].lstrip("\n ")
+                if answer_so_far:
+                    console.print()
+                    console.print("[bold green]qwopus[/] ", end="")
+                    printed_header = True
+                    console.print(answer_so_far, end="", highlight=False)
+                thinking_done = True
+            continue
+
+        # Phase 2: 답변 실시간 출력
+        if not printed_header:
+            console.print()
+            console.print("[bold green]qwopus[/] ", end="")
+            printed_header = True
+        console.print(token, end="", highlight=False)
+
+    # </think> 없이 끝난 경우 — strip_thinking으로 처리
+    if not thinking_done and full_text:
+        _, answer = strip_thinking_fn(full_text)
+        if answer:
+            console.print()
+            console.print("[bold green]qwopus[/] ", end="")
+            console.print(answer, end="", highlight=False)
+            printed_header = True
+
+    if printed_header:
+        console.print()
+        console.print()
+
+    return full_text
+
+
 # ── Status & Info ────────────────────────────────────────────
 
 def print_info(msg: str):
