@@ -1,10 +1,10 @@
-"""Permission system for tool execution."""
+"""도구 실행 권한 시스템."""
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 
-# Patterns that require user confirmation before bash execution
+# bash 실행 전 사용자 확인이 필요한 위험 패턴
 DANGEROUS_PATTERNS: list[re.Pattern] = [
     re.compile(r"\brm\s+-rf\b"),
     re.compile(r"\brm\s+-r\b"),
@@ -24,7 +24,7 @@ DANGEROUS_PATTERNS: list[re.Pattern] = [
 
 @dataclass(frozen=True)
 class ToolPermissionContext:
-    """Controls which tools are allowed."""
+    """허용되는 도구를 제어하는 컨텍스트."""
     deny_names: frozenset[str] = field(default_factory=frozenset)
     deny_prefixes: tuple[str, ...] = ()
 
@@ -36,8 +36,8 @@ class ToolPermissionContext:
 
 
 def check_bash_safety(command: str) -> str | None:
-    """Return a warning message if the command looks dangerous, else None."""
+    """명령어가 위험해 보이면 경고 메시지를 반환하고, 그렇지 않으면 None을 반환한다."""
     for pattern in DANGEROUS_PATTERNS:
         if pattern.search(command):
-            return f"Dangerous pattern detected: {pattern.pattern}"
+            return f"위험한 패턴 감지: {pattern.pattern}"
     return None

@@ -1,4 +1,4 @@
-"""Built-in tool definitions and execution."""
+"""내장 도구 정의 및 실행."""
 from __future__ import annotations
 
 import glob as glob_mod
@@ -10,7 +10,7 @@ from pathlib import Path
 from .models import ToolCall, ToolDefinition, ToolResult
 from .permissions import check_bash_safety
 
-# ── Tool Definitions ─────────────────────────────────────────
+# ── 도구 정의 ─────────────────────────────────────────────────
 
 TOOL_REGISTRY: dict[str, ToolDefinition] = {}
 
@@ -19,67 +19,67 @@ def _register(name: str, description: str, parameters: dict):
     TOOL_REGISTRY[name] = ToolDefinition(name=name, description=description, parameters=parameters)
 
 
-_register("Bash", "Execute a shell command and return its output.", {
+_register("Bash", "셸 명령어를 실행하고 결과를 반환한다.", {
     "type": "object",
     "properties": {
-        "command": {"type": "string", "description": "The shell command to execute."}
+        "command": {"type": "string", "description": "실행할 셸 명령어."}
     },
     "required": ["command"],
 })
 
-_register("FileRead", "Read a file and return its contents.", {
+_register("FileRead", "파일을 읽고 내용을 반환한다.", {
     "type": "object",
     "properties": {
-        "path": {"type": "string", "description": "Absolute path to the file."},
-        "offset": {"type": "integer", "description": "Line number to start reading from (0-based)."},
-        "limit": {"type": "integer", "description": "Number of lines to read."},
+        "path": {"type": "string", "description": "파일의 절대 경로."},
+        "offset": {"type": "integer", "description": "읽기 시작할 줄 번호 (0 기반)."},
+        "limit": {"type": "integer", "description": "읽을 줄 수."},
     },
     "required": ["path"],
 })
 
-_register("FileWrite", "Write content to a file (creates or overwrites).", {
+_register("FileWrite", "파일에 내용을 쓴다 (생성 또는 덮어쓰기).", {
     "type": "object",
     "properties": {
-        "path": {"type": "string", "description": "Absolute path to the file."},
-        "content": {"type": "string", "description": "Content to write."},
+        "path": {"type": "string", "description": "파일의 절대 경로."},
+        "content": {"type": "string", "description": "쓸 내용."},
     },
     "required": ["path", "content"],
 })
 
-_register("FileEdit", "Replace an exact string in a file.", {
+_register("FileEdit", "파일에서 정확한 문자열을 치환한다.", {
     "type": "object",
     "properties": {
-        "path": {"type": "string", "description": "Absolute path to the file."},
-        "old_string": {"type": "string", "description": "Exact text to find."},
-        "new_string": {"type": "string", "description": "Text to replace with."},
+        "path": {"type": "string", "description": "파일의 절대 경로."},
+        "old_string": {"type": "string", "description": "찾을 정확한 텍스트."},
+        "new_string": {"type": "string", "description": "대체할 텍스트."},
     },
     "required": ["path", "old_string", "new_string"],
 })
 
-_register("Glob", "Find files matching a glob pattern.", {
+_register("Glob", "글롭 패턴과 일치하는 파일을 찾는다.", {
     "type": "object",
     "properties": {
-        "pattern": {"type": "string", "description": "Glob pattern (e.g. '**/*.py')."},
-        "path": {"type": "string", "description": "Directory to search in."},
+        "pattern": {"type": "string", "description": "글롭 패턴 (예: '**/*.py')."},
+        "path": {"type": "string", "description": "검색할 디렉토리."},
     },
     "required": ["pattern"],
 })
 
-_register("Grep", "Search file contents with a regex pattern.", {
+_register("Grep", "정규식 패턴으로 파일 내용을 검색한다.", {
     "type": "object",
     "properties": {
-        "pattern": {"type": "string", "description": "Regex pattern to search for."},
-        "path": {"type": "string", "description": "File or directory to search in."},
-        "glob": {"type": "string", "description": "Glob to filter files (e.g. '*.py')."},
+        "pattern": {"type": "string", "description": "검색할 정규식 패턴."},
+        "path": {"type": "string", "description": "검색할 파일 또는 디렉토리."},
+        "glob": {"type": "string", "description": "파일 필터링 글롭 (예: '*.py')."},
     },
     "required": ["pattern"],
 })
 
 
-# ── Tool Execution ───────────────────────────────────────────
+# ── 도구 실행 ─────────────────────────────────────────────────
 
 def execute_tool(call: ToolCall, cwd: str, confirm_fn=None) -> ToolResult:
-    """Execute a tool call and return the result."""
+    """도구 호출을 실행하고 결과를 반환한다."""
     try:
         if call.name == "Bash":
             return _exec_bash(call, cwd, confirm_fn)
@@ -94,17 +94,17 @@ def execute_tool(call: ToolCall, cwd: str, confirm_fn=None) -> ToolResult:
         elif call.name == "Grep":
             return _exec_grep(call, cwd)
         else:
-            return ToolResult(name=call.name, output=f"Unknown tool: {call.name}", success=False)
+            return ToolResult(name=call.name, output=f"알 수 없는 도구: {call.name}", success=False)
     except Exception as e:
-        return ToolResult(name=call.name, output=f"Error: {e}", success=False)
+        return ToolResult(name=call.name, output=f"오류: {e}", success=False)
 
 
 def _exec_bash(call: ToolCall, cwd: str, confirm_fn) -> ToolResult:
     command = call.arguments.get("command", "")
     warning = check_bash_safety(command)
     if warning and confirm_fn:
-        if not confirm_fn(f"⚠️  {warning}\nCommand: {command}\nAllow? [y/N]: "):
-            return ToolResult(name="Bash", output="Command denied by user.", success=False)
+        if not confirm_fn(f"⚠️  {warning}\n명령어: {command}\n허용하시겠습니까? [y/N]: "):
+            return ToolResult(name="Bash", output="사용자가 명령어를 거부했습니다.", success=False)
 
     result = subprocess.run(
         command, shell=True, capture_output=True, text=True,
@@ -114,10 +114,10 @@ def _exec_bash(call: ToolCall, cwd: str, confirm_fn) -> ToolResult:
     if result.stderr:
         output += ("\n" if output else "") + result.stderr
     if not output:
-        output = "(no output)"
-    # Truncate very long output
+        output = "(출력 없음)"
+    # 너무 긴 출력 잘라내기
     if len(output) > 8000:
-        output = output[:4000] + "\n\n... (truncated) ...\n\n" + output[-2000:]
+        output = output[:4000] + "\n\n... (잘림) ...\n\n" + output[-2000:]
     return ToolResult(name="Bash", output=output, success=result.returncode == 0)
 
 
@@ -129,7 +129,7 @@ def _exec_file_read(call: ToolCall) -> ToolResult:
         lines = f.readlines()
     selected = lines[offset:offset + limit]
     numbered = "".join(f"{offset + i + 1}\t{line}" for i, line in enumerate(selected))
-    return ToolResult(name="FileRead", output=numbered or "(empty file)")
+    return ToolResult(name="FileRead", output=numbered or "(빈 파일)")
 
 
 def _exec_file_write(call: ToolCall) -> ToolResult:
@@ -138,7 +138,7 @@ def _exec_file_write(call: ToolCall) -> ToolResult:
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w") as f:
         f.write(content)
-    return ToolResult(name="FileWrite", output=f"Wrote {len(content)} bytes to {path}")
+    return ToolResult(name="FileWrite", output=f"{path}에 {len(content)}바이트를 기록했습니다")
 
 
 def _exec_file_edit(call: ToolCall) -> ToolResult:
@@ -149,13 +149,13 @@ def _exec_file_edit(call: ToolCall) -> ToolResult:
         content = f.read()
     count = content.count(old)
     if count == 0:
-        return ToolResult(name="FileEdit", output="old_string not found in file.", success=False)
+        return ToolResult(name="FileEdit", output="파일에서 old_string을 찾을 수 없습니다.", success=False)
     if count > 1:
-        return ToolResult(name="FileEdit", output=f"old_string found {count} times; must be unique.", success=False)
+        return ToolResult(name="FileEdit", output=f"old_string이 {count}번 발견되었습니다. 고유해야 합니다.", success=False)
     content = content.replace(old, new, 1)
     with open(path, "w") as f:
         f.write(content)
-    return ToolResult(name="FileEdit", output=f"Edited {path}")
+    return ToolResult(name="FileEdit", output=f"{path} 수정 완료")
 
 
 def _exec_glob(call: ToolCall, cwd: str) -> ToolResult:
@@ -164,11 +164,11 @@ def _exec_glob(call: ToolCall, cwd: str) -> ToolResult:
     full_pattern = os.path.join(search_path, pattern)
     matches = sorted(glob_mod.glob(full_pattern, recursive=True))
     if not matches:
-        return ToolResult(name="Glob", output="No matches found.")
-    # Limit output
+        return ToolResult(name="Glob", output="일치하는 항목이 없습니다.")
+    # 출력 제한
     if len(matches) > 200:
         matches = matches[:200]
-        matches.append(f"... and more (truncated at 200)")
+        matches.append(f"... 외 다수 (200개에서 잘림)")
     return ToolResult(name="Glob", output="\n".join(matches))
 
 
@@ -185,22 +185,22 @@ def _exec_grep(call: ToolCall, cwd: str) -> ToolResult:
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     output = result.stdout.strip()
     if not output:
-        return ToolResult(name="Grep", output="No matches found.")
+        return ToolResult(name="Grep", output="일치하는 항목이 없습니다.")
     lines = output.split("\n")
     if len(lines) > 100:
-        output = "\n".join(lines[:100]) + f"\n... ({len(lines)} total matches, showing first 100)"
+        output = "\n".join(lines[:100]) + f"\n... (전체 {len(lines)}건 중 처음 100건 표시)"
     return ToolResult(name="Grep", output=output)
 
 
 def get_tool_definitions_for_prompt() -> str:
-    """Format tool definitions for injection into system prompt."""
+    """시스템 프롬프트에 삽입할 도구 정의를 포맷한다."""
     parts = []
     for tool in TOOL_REGISTRY.values():
         props = tool.parameters.get("properties", {})
         params_desc = []
         for pname, pdef in props.items():
-            req = " (required)" if pname in tool.parameters.get("required", []) else ""
+            req = " (필수)" if pname in tool.parameters.get("required", []) else ""
             params_desc.append(f"    - {pname}: {pdef.get('description', '')}{req}")
-        params_str = "\n".join(params_desc) if params_desc else "    (no parameters)"
-        parts.append(f"## {tool.name}\n{tool.description}\nParameters:\n{params_str}")
+        params_str = "\n".join(params_desc) if params_desc else "    (매개변수 없음)"
+        parts.append(f"## {tool.name}\n{tool.description}\n매개변수:\n{params_str}")
     return "\n\n".join(parts)

@@ -1,4 +1,4 @@
-"""Local LLM engine — wraps llama-cpp-python for the harness."""
+"""로컬 LLM 엔진 — 하네스를 위한 llama-cpp-python 래퍼."""
 from __future__ import annotations
 
 import logging
@@ -9,7 +9,7 @@ from .gpu import detect_gpus, build_llama_config, print_gpu_summary
 logger = logging.getLogger(__name__)
 
 _llm = None
-_n_ctx = 8192  # Will be set on model load
+_n_ctx = 8192  # 모델 로드 시 설정됨
 
 MODEL_REPO = "mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF"
 MODEL_FILE = "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.Q5_K_M.gguf"
@@ -17,7 +17,7 @@ MODEL_DIR = Path.home() / "models"
 
 
 def get_llm():
-    """Load the local model (singleton). Auto-detects GPU config."""
+    """로컬 모델을 로드한다 (싱글턴). GPU 설정을 자동 감지한다."""
     global _llm
     if _llm is not None:
         return _llm
@@ -25,46 +25,46 @@ def get_llm():
     from llama_cpp import Llama
     from huggingface_hub import hf_hub_download
 
-    # Detect GPUs and build config
+    # GPU 감지 및 설정 구성
     gpus = detect_gpus()
-    print("🔍 GPU detection:")
+    print("🔍 GPU 감지:")
     if gpus:
         print_gpu_summary(gpus)
-    config = build_llama_config(gpus)  # Raises RuntimeError if insufficient
+    config = build_llama_config(gpus)  # VRAM 부족 시 RuntimeError 발생
 
-    # Download model if needed
+    # 필요 시 모델 다운로드
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     model_path = MODEL_DIR / MODEL_FILE
 
     if not model_path.exists():
-        print(f"⬇️  Downloading model (~19.4GB): {MODEL_FILE}")
+        print(f"⬇️  모델 다운로드 중 (~19.4GB): {MODEL_FILE}")
         hf_hub_download(
             repo_id=MODEL_REPO,
             filename=MODEL_FILE,
             local_dir=str(MODEL_DIR),
             local_dir_use_symlinks=False,
         )
-        print("✅ Download complete.")
+        print("✅ 다운로드 완료.")
 
-    # Load model
+    # 모델 로드
     n_gpus = len(gpus)
     split_info = f", tensor_split={config.get('tensor_split', 'auto')}" if n_gpus > 1 else ""
-    print(f"🚀 Loading model (n_ctx={config['n_ctx']}, {n_gpus} GPU(s){split_info})...")
+    print(f"🚀 모델 로드 중 (n_ctx={config['n_ctx']}, GPU {n_gpus}개{split_info})...")
 
     global _n_ctx
     _n_ctx = config["n_ctx"]
     _llm = Llama(model_path=str(model_path), **config)
-    print("✅ Model loaded.\n")
+    print("✅ 모델 로드 완료.\n")
     return _llm
 
 
 def get_n_ctx() -> int:
-    """Return the context window size (call after get_llm())."""
+    """컨텍스트 윈도우 크기를 반환한다 (get_llm() 호출 후 사용)."""
     return _n_ctx
 
 
 def chat_completion(messages: list[dict], max_tokens: int = 4096, temperature: float = 0.3) -> dict:
-    """Run chat completion and return the raw response dict."""
+    """채팅 완성을 실행하고 원시 응답 딕셔너리를 반환한다."""
     llm = get_llm()
     return llm.create_chat_completion(
         messages=messages,
@@ -75,10 +75,10 @@ def chat_completion(messages: list[dict], max_tokens: int = 4096, temperature: f
 
 
 def strip_thinking(text: str) -> tuple[str, str]:
-    """Remove <think>...</think> block and internal reasoning, return (thinking, answer)."""
+    """<think>...</think> 블록과 내부 추론을 제거하고 (사고 과정, 답변)을 반환한다."""
     import re
 
-    # Handle <think>...</think> blocks (possibly multiple)
+    # <think>...</think> 블록 처리 (여러 개일 수 있음)
     pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
     thinking_parts = pattern.findall(text)
     if thinking_parts:
@@ -86,14 +86,14 @@ def strip_thinking(text: str) -> tuple[str, str]:
         answer = pattern.sub("", text).strip()
         return thinking, answer
 
-    # Handle </think> at start (model sometimes omits opening tag)
+    # 시작 부분의 </think> 처리 (모델이 여는 태그를 생략하는 경우가 있음)
     if text.lstrip().startswith("</think>"):
         answer = text.split("</think>", 1)[1].strip()
         return "", answer
 
-    # Heuristic: strip leading internal reasoning lines before the actual answer.
-    # The model often starts with "The user wants..." / "Let me..." / "I need to..."
-    # We detect these and move them to thinking.
+    # 휴리스틱: 실제 답변 전에 나오는 내부 추론 줄을 제거한다.
+    # 모델이 종종 "The user wants..." / "Let me..." / "I need to..." 등으로 시작한다.
+    # 이러한 패턴을 감지하여 사고 과정으로 이동시킨다.
     lines = text.split("\n")
     reasoning_lines = []
     answer_start = 0
