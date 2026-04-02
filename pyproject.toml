@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qwopus"
+version = "0.1.0"
+description = "Local AI coding agent powered by Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "llama-cpp-python>=0.3.0",
+    "huggingface_hub>=0.20.0",
+]
+
+[project.optional-dependencies]
+cuda = []  # CUDA build handled separately via CMAKE_ARGS
+
+[project.scripts]
+qwopus = "harness.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["harness*"]

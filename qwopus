@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Qwopus — Launch the local AI coding agent from anywhere
+HARNESS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+
+if [ -n "$1" ] && [ -d "$1" ]; then
+    cd "$1" && shift
+fi
+
+export PYTHONPATH="$HARNESS_DIR:${PYTHONPATH:-}"
+exec python3 -m harness --cwd "$(pwd)" "$@"
