@@ -116,6 +116,7 @@ _register("ScholarSearch", "Google Scholar에서 논문을 검색한다. Citatio
         "query": {"type": "string", "description": "검색어."},
         "year_from": {"type": "integer", "description": "이 연도 이후 논문만 (예: 2023)."},
         "max_results": {"type": "integer", "description": "최대 결과 수 (기본 5)."},
+        "exclude_survey": {"type": "boolean", "description": "True면 survey/review 논문을 제외하고 실제 모델 논문만 검색."},
     },
     "required": ["query"],
 })
@@ -296,7 +297,8 @@ def _exec_scholar_search(call: ToolCall) -> ToolResult:
     query = call.arguments.get("query", "")
     year_from = call.arguments.get("year_from", 0)
     max_results = call.arguments.get("max_results", 5)
-    output = scholar_search(query, max_results=max_results, year_from=year_from)
+    exclude_survey = call.arguments.get("exclude_survey", False)
+    output = scholar_search(query, max_results=max_results, year_from=year_from, exclude_survey=exclude_survey)
     return ToolResult(name="ScholarSearch", output=output)
 
 

@@ -22,6 +22,7 @@ You are Qwopus, a powerful AI coding assistant running locally on the user's mac
 You help with software engineering tasks: writing code, debugging, file manipulation, \
 running commands, and answering questions about codebases.
 
+Current date: {current_date}
 Current working directory: {cwd}
 
 # Project Index
@@ -78,9 +79,11 @@ TOOL_BLOCK_RE = re.compile(r"```tool\s*\n(\{.*?\})\s*\n```", re.DOTALL)
 
 
 def build_system_prompt(cwd: str) -> str:
+    from datetime import date
     index = build_project_index(cwd)
     return SYSTEM_PROMPT_TEMPLATE.format(
         cwd=cwd,
+        current_date=date.today().isoformat(),
         project_index=index,
         tool_definitions=get_tool_definitions_for_prompt(),
     )

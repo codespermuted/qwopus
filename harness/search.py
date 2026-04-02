@@ -73,12 +73,16 @@ def github_search(query: str, max_results: int = 5, language: str = "") -> str:
 
 # ── Google Scholar 크롤링 ─────────────────────────────────────
 
-def scholar_search(query: str, max_results: int = 5, year_from: int = 0) -> str:
+def scholar_search(query: str, max_results: int = 5, year_from: int = 0, exclude_survey: bool = False) -> str:
     """Google Scholar에서 논문을 검색한다. Citation 수 포함."""
     import requests
     from bs4 import BeautifulSoup
 
-    params = f"q={quote_plus(query)}&num={max_results}&hl=en"
+    search_query = query
+    if exclude_survey:
+        search_query += " -survey -review -comprehensive"
+
+    params = f"q={quote_plus(search_query)}&num={max_results + 5}&hl=en"
     if year_from:
         params += f"&as_ylo={year_from}"
 
