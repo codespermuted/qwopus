@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 _llm = None
 _n_ctx = 8192  # 모델 로드 시 설정됨
 
-MODEL_REPO = "mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF"
-MODEL_FILE = "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.Q5_K_M.gguf"
+# 기본값 — settings.json에서 오버라이드 가능
+DEFAULT_REPO = "mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF"
+DEFAULT_FILE = "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.Q5_K_M.gguf"
 MODEL_DIR = Path.home() / "models"
 
 
@@ -25,22 +26,28 @@ def get_llm():
     from llama_cpp import Llama
     from huggingface_hub import hf_hub_download
 
+    # settings.json에서 모델 설정 로드
+    from .config import Settings
+    settings = Settings.load()
+    model_repo = settings.get("model.repo", DEFAULT_REPO)
+    model_file = settings.get("model.file", DEFAULT_FILE)
+
     # GPU 감지 및 설정 구성
     gpus = detect_gpus()
     print("🔍 GPU 감지:")
     if gpus:
         print_gpu_summary(gpus)
-    config = build_llama_config(gpus)  # VRAM 부족 시 RuntimeError 발생
+    config = build_llama_config(gpus)
 
     # 필요 시 모델 다운로드
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    model_path = MODEL_DIR / MODEL_FILE
+    model_path = MODEL_DIR / model_file
 
     if not model_path.exists():
-        print(f"⬇️  모델 다운로드 중 (~19.4GB): {MODEL_FILE}")
+        print(f"⬇️  모델 다운로드 중: {model_file}")
         hf_hub_download(
-            repo_id=MODEL_REPO,
-            filename=MODEL_FILE,
+            repo_id=model_repo,
+            filename=model_file,
             local_dir=str(MODEL_DIR),
             local_dir_use_symlinks=False,
         )
