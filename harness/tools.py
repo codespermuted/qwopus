@@ -100,6 +100,35 @@ _register("WebFetch", "URL의 웹 페이지 본문을 가져와 텍스트로 반
     "required": ["url"],
 })
 
+_register("GitHubSearch", "GitHub 레포를 Star 순으로 검색한다. 라이브러리/프로젝트 비교 시 사용.", {
+    "type": "object",
+    "properties": {
+        "query": {"type": "string", "description": "검색어 (예: 'AutoML time series')."},
+        "language": {"type": "string", "description": "프로그래밍 언어 필터 (예: 'python')."},
+        "max_results": {"type": "integer", "description": "최대 결과 수 (기본 5)."},
+    },
+    "required": ["query"],
+})
+
+_register("ScholarSearch", "Google Scholar에서 논문을 검색한다. Citation 수, PDF 링크 포함. 기술 조사 시 사용.", {
+    "type": "object",
+    "properties": {
+        "query": {"type": "string", "description": "검색어."},
+        "year_from": {"type": "integer", "description": "이 연도 이후 논문만 (예: 2023)."},
+        "max_results": {"type": "integer", "description": "최대 결과 수 (기본 5)."},
+    },
+    "required": ["query"],
+})
+
+_register("StackOverflow", "Stack Overflow에서 투표 순으로 질문을 검색한다. 기술 문제 해결 시 사용.", {
+    "type": "object",
+    "properties": {
+        "query": {"type": "string", "description": "검색어."},
+        "max_results": {"type": "integer", "description": "최대 결과 수 (기본 5)."},
+    },
+    "required": ["query"],
+})
+
 
 # ── 도구 실행 ─────────────────────────────────────────────────
 
@@ -124,6 +153,12 @@ def execute_tool(call: ToolCall, cwd: str, confirm_fn=None) -> ToolResult:
             return _exec_web_search(call)
         elif call.name == "WebFetch":
             return _exec_web_fetch(call)
+        elif call.name == "GitHubSearch":
+            return _exec_github_search(call)
+        elif call.name == "ScholarSearch":
+            return _exec_scholar_search(call)
+        elif call.name == "StackOverflow":
+            return _exec_stackoverflow(call)
         else:
             return ToolResult(name=call.name, output=f"알 수 없는 도구: {call.name}", success=False)
     except Exception as e:
@@ -245,6 +280,32 @@ def _exec_web_fetch(call: ToolCall) -> ToolResult:
         return ToolResult(name="WebFetch", output="URL이 비어있습니다.", success=False)
     output = web_fetch(url)
     return ToolResult(name="WebFetch", output=output)
+
+
+def _exec_github_search(call: ToolCall) -> ToolResult:
+    from .search import github_search
+    query = call.arguments.get("query", "")
+    language = call.arguments.get("language", "")
+    max_results = call.arguments.get("max_results", 5)
+    output = github_search(query, max_results=max_results, language=language)
+    return ToolResult(name="GitHubSearch", output=output)
+
+
+def _exec_scholar_search(call: ToolCall) -> ToolResult:
+    from .search import scholar_search
+    query = call.arguments.get("query", "")
+    year_from = call.arguments.get("year_from", 0)
+    max_results = call.arguments.get("max_results", 5)
+    output = scholar_search(query, max_results=max_results, year_from=year_from)
+    return ToolResult(name="ScholarSearch", output=output)
+
+
+def _exec_stackoverflow(call: ToolCall) -> ToolResult:
+    from .search import stackoverflow_search
+    query = call.arguments.get("query", "")
+    max_results = call.arguments.get("max_results", 5)
+    output = stackoverflow_search(query, max_results=max_results)
+    return ToolResult(name="StackOverflow", output=output)
 
 
 def get_tool_definitions_for_prompt() -> str:
