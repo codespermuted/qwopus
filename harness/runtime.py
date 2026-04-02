@@ -5,7 +5,7 @@ import json
 import re
 from typing import Callable
 
-from .engine import chat_completion, strip_thinking
+from .engine import chat_completion, strip_thinking, get_n_ctx
 from .models import ToolCall, ToolResult, TurnResult, UsageSummary
 from .session import Session
 from .tools import (
@@ -90,6 +90,12 @@ class ConversationRuntime:
 
     def run_turn(self, user_input: str) -> TurnResult:
         """Execute a full turn: submit user message, handle tool calls in a loop."""
+        # Sync context limit with actual model n_ctx (set after first load)
+        try:
+            self.session.max_context_tokens = get_n_ctx() - 2048  # headroom for output
+        except Exception:
+            pass
+
         self.session.add_user_message(user_input)
 
         all_tool_calls: list[ToolCall] = []
@@ -153,8 +159,16 @@ class ConversationRuntime:
 
                 ui.print_tool_result(tc.name, result.output, result.success)
 
+                # Truncate tool output for context to avoid blowing up tokens
+                output_for_context = result.output
+                if len(output_for_context) > 3000:
+                    output_for_context = (
+                        output_for_context[:2000]
+                        + "\n\n... (truncated) ...\n\n"
+                        + output_for_context[-800:]
+                    )
                 tool_output_parts.append(
-                    f"[Tool Result: {result.name}]\n{result.output}"
+                    f"[Tool Result: {result.name}]\n{output_for_context}"
                 )
 
             # Don't display intermediate text when tools are being called

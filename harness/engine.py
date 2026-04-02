@@ -9,6 +9,7 @@ from .gpu import detect_gpus, build_llama_config, print_gpu_summary
 logger = logging.getLogger(__name__)
 
 _llm = None
+_n_ctx = 8192  # Will be set on model load
 
 MODEL_REPO = "mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF"
 MODEL_FILE = "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.Q5_K_M.gguf"
@@ -50,9 +51,16 @@ def get_llm():
     split_info = f", tensor_split={config.get('tensor_split', 'auto')}" if n_gpus > 1 else ""
     print(f"🚀 Loading model (n_ctx={config['n_ctx']}, {n_gpus} GPU(s){split_info})...")
 
+    global _n_ctx
+    _n_ctx = config["n_ctx"]
     _llm = Llama(model_path=str(model_path), **config)
     print("✅ Model loaded.\n")
     return _llm
+
+
+def get_n_ctx() -> int:
+    """Return the context window size (call after get_llm())."""
+    return _n_ctx
 
 
 def chat_completion(messages: list[dict], max_tokens: int = 4096, temperature: float = 0.3) -> dict:

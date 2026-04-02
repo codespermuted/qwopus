@@ -9,6 +9,9 @@ from typing import Any
 
 SESSION_DIR = Path.home() / ".qwopus" / "sessions"
 
+# Rough chars-per-token estimate for mixed CJK/English text
+CHARS_PER_TOKEN = 3
+
 
 @dataclass
 class Session:
@@ -17,26 +20,39 @@ class Session:
     messages: list[dict[str, str]] = field(default_factory=list)
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
-    max_history_messages: int = 40  # Keep last N messages for context
+    max_context_tokens: int = 14000  # Leave headroom below n_ctx
 
     def add_user_message(self, content: str):
         self.messages.append({"role": "user", "content": content})
-        self._compact()
 
     def add_assistant_message(self, content: str):
         self.messages.append({"role": "assistant", "content": content})
-        self._compact()
 
     def get_messages_for_context(self, system_prompt: str) -> list[dict]:
-        """Build the messages list for the LLM, with system prompt."""
+        """Build the messages list for the LLM, trimming old messages to fit."""
+        system_tokens = self._estimate_tokens(system_prompt)
+        budget = self.max_context_tokens - system_tokens
+
+        # Walk backwards, adding messages until budget is exhausted
+        selected = []
+        used = 0
+        for msg in reversed(self.messages):
+            msg_tokens = self._estimate_tokens(msg["content"])
+            if used + msg_tokens > budget:
+                break
+            selected.append(msg)
+            used += msg_tokens
+
+        selected.reverse()
+
         result = [{"role": "system", "content": system_prompt}]
-        result.extend(self.messages)
+        result.extend(selected)
         return result
 
-    def _compact(self):
-        """Keep only the last N messages to stay within context limits."""
-        if len(self.messages) > self.max_history_messages:
-            self.messages = self.messages[-self.max_history_messages:]
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        """Rough token estimate."""
+        return max(1, len(text) // CHARS_PER_TOKEN)
 
     def save(self):
         SESSION_DIR.mkdir(parents=True, exist_ok=True)
