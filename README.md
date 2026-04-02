@@ -2,11 +2,6 @@
 
 **Local AI coding agent** powered by Qwen3.5-27B, distilled from Claude 4.6 Opus reasoning.
 
-Claude Code처럼 동작하지만, **완전히 로컬**에서 실행됩니다. API 키 없음, 클라우드 없음, 비용 없음.
-
-> **"입만 있던 챗봇에 손(도구)을 달았습니다."**
-> 파일을 읽고, 수정하고, 명령어를 실행하는 코딩 에이전트를 로컬 GPU에서.
-
 ---
 
 ## Demo
