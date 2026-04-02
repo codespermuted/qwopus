@@ -109,3 +109,13 @@ def print_gpu_summary(gpus: list[dict]):
     """Print a nice GPU summary."""
     for i, g in enumerate(gpus):
         print(f"  GPU {i}: {g['name']} — {g['total_mb']:,}MB total, {g['free_mb']:,}MB free")
+
+
+def format_gpu_info(gpus: list[dict]) -> str:
+    """Format GPU info as a single-line string."""
+    if not gpus:
+        return ""
+    parts = []
+    for g in gpus:
+        parts.append(f"{g['name']} ({g['total_mb']:,}MB)")
+    return "GPU: " + " + ".join(parts)

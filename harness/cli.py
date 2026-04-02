@@ -8,16 +8,7 @@ import sys
 from .commands import handle_slash_command
 from .runtime import ConversationRuntime
 from .session import Session
-
-BANNER = """\
-╔══════════════════════════════════════════════════════════════╗
-║  🐙 Qwopus — Local AI Coding Agent                         ║
-║     Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled        ║
-║     Q5_K_M · 2×RTX 5060 Ti · llama.cpp                     ║
-╠══════════════════════════════════════════════════════════════╣
-║  /help for commands · /quit to exit · !cmd for shell        ║
-╚══════════════════════════════════════════════════════════════╝
-"""
+from . import ui
 
 
 def main():
@@ -42,7 +33,7 @@ def main():
     # Load or create session
     if resume_id:
         session = Session.load(resume_id)
-        print(f"📂 Resumed session: {session.session_id}")
+        ui.print_success(f"Resumed session: {session.session_id}")
     else:
         session = Session()
 
@@ -51,18 +42,23 @@ def main():
     # One-shot mode: remaining args are a prompt
     if rest_args:
         prompt = " ".join(rest_args)
-        print(f"📝 {prompt}\n")
+        ui.console.print(f"[bold blue]❯[/] {prompt}\n")
         runtime.run_turn(prompt)
+        _print_usage(session)
         return
 
-    print(BANNER)
-    print(f"📁 Working directory: {cwd}\n")
+    # Interactive mode
+    # Detect GPUs for banner (without loading model yet)
+    from .gpu import detect_gpus, format_gpu_info
+    gpus = detect_gpus()
+
+    ui.print_banner(cwd, format_gpu_info(gpus))
 
     while True:
-        try:
-            user_input = input("👤 You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\n👋 Bye!")
+        user_input = ui.get_user_input()
+
+        if user_input is None:
+            ui.console.print("\n[dim]Bye![/]")
             break
 
         if not user_input:
@@ -72,32 +68,45 @@ def main():
         if user_input.startswith("!"):
             cmd = user_input[1:].strip()
             if cmd:
+                ui.console.print(f"[dim]$ {cmd}[/]")
                 try:
-                    result = subprocess.run(cmd, shell=True, cwd=cwd)
+                    subprocess.run(cmd, shell=True, cwd=cwd)
                 except Exception as e:
-                    print(f"Error: {e}")
+                    ui.print_error(str(e))
             continue
 
         # Slash commands
         if user_input.startswith("/"):
             response = handle_slash_command(user_input, session, cwd)
             if response == "__EXIT__":
-                print("👋 Bye!")
+                ui.console.print("[dim]Bye![/]")
                 break
             if response is not None:
-                print(response)
+                # Commands now render their own output via rich
+                if response:  # Non-empty means legacy text to display
+                    ui.print_command_response(response)
                 continue
-            # Unknown slash command — treat as regular prompt
-            print(f"Unknown command. Sending to LLM...")
+            ui.print_warning(f"Unknown command: {user_input.split()[0]}")
+            continue
 
         # Regular prompt → run turn
-        print()
         result = runtime.run_turn(user_input)
-        print()
+        _print_usage(session)
 
         # Auto-save periodically
         if len(session.messages) % 10 == 0:
             session.save()
+
+
+def _print_usage(session: Session):
+    """Print token usage after each turn."""
+    total = session.total_prompt_tokens + session.total_completion_tokens
+    if total > 0:
+        ui.console.print(
+            f"[dim]  tokens: {total:,} "
+            f"(prompt {session.total_prompt_tokens:,} + "
+            f"completion {session.total_completion_tokens:,})[/]"
+        )
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ from .tools import (
     execute_tool,
     get_tool_definitions_for_prompt,
 )
+from . import ui
 
 # Maximum tool-use iterations per turn to prevent infinite loops
 MAX_TOOL_ROUNDS = 10
@@ -41,9 +42,11 @@ When you are done and have no more tools to call, just respond with normal text.
 # Guidelines
 - Read files before editing them.
 - Use Bash for system commands, Grep/Glob for searching.
-- Be concise. Lead with the answer.
+- Be concise. Lead with the answer, not the reasoning.
 - If a command is dangerous, explain why before running it.
 - Do NOT fabricate tool results. Always actually call the tool.
+- Do NOT include internal reasoning like "The user wants..." or "Let me..." in your response.
+- Go straight to the point. Your response should contain ONLY the final answer for the user.
 """
 
 # Regex to extract ```tool ... ``` blocks from LLM output
@@ -78,13 +81,12 @@ def strip_tool_blocks(text: str) -> str:
 
 
 class ConversationRuntime:
-    """Manages the conversation loop: user → LLM → tools → LLM → ..."""
+    """Manages the conversation loop: user -> LLM -> tools -> LLM -> ..."""
 
-    def __init__(self, cwd: str, session: Session | None = None, confirm_fn: Callable | None = None):
+    def __init__(self, cwd: str, session: Session | None = None):
         self.cwd = cwd
         self.session = session or Session()
         self.system_prompt = build_system_prompt(cwd)
-        self.confirm_fn = confirm_fn or (lambda msg: input(msg).strip().lower() in ("y", "yes"))
 
     def run_turn(self, user_input: str) -> TurnResult:
         """Execute a full turn: submit user message, handle tool calls in a loop."""
@@ -98,8 +100,10 @@ class ConversationRuntime:
             # Build messages for the LLM
             messages = self.session.get_messages_for_context(self.system_prompt)
 
-            # Run inference
-            response = chat_completion(messages, max_tokens=4096, temperature=0.3)
+            # Run inference with spinner
+            with ui.tool_spinner("model", "thinking..."):
+                response = chat_completion(messages, max_tokens=4096, temperature=0.3)
+
             raw_content = response["choices"][0]["message"]["content"]
             usage = response.get("usage", {})
 
@@ -109,18 +113,19 @@ class ConversationRuntime:
             # Strip thinking
             thinking, content = strip_thinking(raw_content)
             if thinking:
-                print(f"\n💭 Thinking:\n{thinking}\n")
+                ui.print_thinking(thinking)
 
             # Check for tool calls
             tool_calls = parse_tool_calls(content)
             display_text = strip_tool_blocks(content)
 
             if display_text:
-                print(display_text)
                 final_text += display_text + "\n"
 
             if not tool_calls:
                 # No tools requested — turn is done
+                if display_text:
+                    ui.print_response(display_text)
                 self.session.add_assistant_message(content)
                 return TurnResult(
                     user_prompt=user_input,
@@ -137,19 +142,23 @@ class ConversationRuntime:
             # Execute tools and feed results back
             tool_output_parts = []
             for tc in tool_calls:
-                print(f"\n🔧 {tc.name}: {_summarize_args(tc)}")
-                result = execute_tool(tc, self.cwd, self.confirm_fn)
+                summary = _summarize_args(tc)
+                ui.print_tool_call(tc.name, summary)
+
+                with ui.tool_spinner(tc.name, summary):
+                    result = execute_tool(tc, self.cwd, ui.confirm)
+
                 all_tool_calls.append(tc)
                 all_tool_results.append(result)
 
-                status = "✅" if result.success else "❌"
-                # Show truncated output
-                preview = result.output[:300] + "..." if len(result.output) > 300 else result.output
-                print(f"   {status} {preview}")
+                ui.print_tool_result(tc.name, result.output, result.success)
 
                 tool_output_parts.append(
                     f"[Tool Result: {result.name}]\n{result.output}"
                 )
+
+            # Don't display intermediate text when tools are being called
+            # — the final response will come in the next round
 
             # Add assistant message (with tool calls) and tool results to history
             self.session.add_assistant_message(content)
@@ -158,6 +167,7 @@ class ConversationRuntime:
             )
 
         # Exceeded max tool rounds
+        ui.print_warning("Max tool rounds reached.")
         self.session.add_assistant_message("(max tool rounds reached)")
         return TurnResult(
             user_prompt=user_input,

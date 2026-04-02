@@ -67,11 +67,45 @@ def chat_completion(messages: list[dict], max_tokens: int = 4096, temperature: f
 
 
 def strip_thinking(text: str) -> tuple[str, str]:
-    """Remove <think>...</think> block, return (thinking, answer)."""
-    if "<think>" in text and "</think>" in text:
-        start = text.index("<think>") + len("<think>")
-        end = text.index("</think>")
-        thinking = text[start:end].strip()
-        answer = text[end + len("</think>"):].strip()
+    """Remove <think>...</think> block and internal reasoning, return (thinking, answer)."""
+    import re
+
+    # Handle <think>...</think> blocks (possibly multiple)
+    pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+    thinking_parts = pattern.findall(text)
+    if thinking_parts:
+        thinking = "\n".join(p.strip() for p in thinking_parts)
+        answer = pattern.sub("", text).strip()
         return thinking, answer
+
+    # Handle </think> at start (model sometimes omits opening tag)
+    if text.lstrip().startswith("</think>"):
+        answer = text.split("</think>", 1)[1].strip()
+        return "", answer
+
+    # Heuristic: strip leading internal reasoning lines before the actual answer.
+    # The model often starts with "The user wants..." / "Let me..." / "I need to..."
+    # We detect these and move them to thinking.
+    lines = text.split("\n")
+    reasoning_lines = []
+    answer_start = 0
+    reasoning_prefixes = (
+        "the user ", "let me ", "i need to ", "i should ", "i'll ",
+        "i will ", "looking at ", "based on ", "now i ", "first,",
+        "사용자가 ", "먼저 ", "확인해", "살펴보",
+    )
+    for i, line in enumerate(lines):
+        stripped = line.strip().lower()
+        if stripped and any(stripped.startswith(p) for p in reasoning_prefixes):
+            reasoning_lines.append(line.strip())
+            answer_start = i + 1
+        else:
+            break
+
+    if reasoning_lines and answer_start < len(lines):
+        thinking = "\n".join(reasoning_lines)
+        answer = "\n".join(lines[answer_start:]).strip()
+        if answer:
+            return thinking, answer
+
     return "", text
