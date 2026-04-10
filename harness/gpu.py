@@ -1,4 +1,4 @@
-"""GPU 감지 및 모델 설정."""
+"""GPU detection and model configuration."""
 from __future__ import annotations
 
 import subprocess
@@ -6,12 +6,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Q5_K_M 모델 (~19.4GB)에 필요한 최소 VRAM (MB)
+# Minimum VRAM (MB) required for the Q5_K_M model (~19.4GB)
 MIN_TOTAL_VRAM_MB = 18_000
 
 
 def detect_gpus() -> list[dict]:
-    """NVIDIA GPU와 VRAM을 감지한다. {name, total_mb, free_mb} 리스트를 반환한다."""
+    """Detect NVIDIA GPUs and their VRAM. Returns a list of {name, total_mb, free_mb}."""
     try:
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.total,memory.free",
@@ -39,15 +39,15 @@ def detect_gpus() -> list[dict]:
 
 def build_llama_config(gpus: list[dict]) -> dict:
     """
-    사용 가능한 GPU를 기반으로 llama.cpp 설정을 구성한다.
-    n_gpu_layers, tensor_split, n_ctx 등이 포함된 딕셔너리를 반환한다.
-    VRAM이 부족하면 RuntimeError를 발생시킨다.
+    Build a llama.cpp config based on available GPUs.
+    Returns a dict containing n_gpu_layers, tensor_split, n_ctx, etc.
+    Raises RuntimeError if there is not enough VRAM.
     """
     if not gpus:
         raise RuntimeError(
-            "NVIDIA GPU가 감지되지 않았습니다.\n"
-            "Qwopus는 총 VRAM 18GB 이상의 GPU가 필요합니다.\n"
-            "27B 모델은 CPU 전용 모드를 지원하지 않습니다."
+            "No NVIDIA GPU detected.\n"
+            "Qwopus requires GPUs with at least 18GB of total VRAM.\n"
+            "The 27B model does not support CPU-only mode."
         )
 
     total_vram = sum(g["total_mb"] for g in gpus)
@@ -56,34 +56,34 @@ def build_llama_config(gpus: list[dict]) -> dict:
     if total_vram < MIN_TOTAL_VRAM_MB:
         gpu_info = ", ".join(f"{g['name']} ({g['total_mb']}MB)" for g in gpus)
         raise RuntimeError(
-            f"VRAM 부족: GPU {len(gpus)}개에서 총 {total_vram:,}MB.\n"
+            f"Insufficient VRAM: {total_vram:,}MB across {len(gpus)} GPU(s).\n"
             f"  GPU: {gpu_info}\n"
-            f"  필요량: Q5_K_M (27B 모델)에 ~{MIN_TOTAL_VRAM_MB:,}MB.\n"
+            f"  Required: ~{MIN_TOTAL_VRAM_MB:,}MB for Q5_K_M (27B model).\n"
             f"\n"
-            f"대안:\n"
-            f"  - 더 작은 양자화 사용 (Q4_K_M, Q3_K_M)\n"
-            f"  - 더 작은 모델 사용 (14B, 7B)\n"
-            f"  - GPU VRAM 추가"
+            f"Alternatives:\n"
+            f"  - Use a smaller quantization (Q4_K_M, Q3_K_M)\n"
+            f"  - Use a smaller model (14B, 7B)\n"
+            f"  - Add more GPU VRAM"
         )
 
     if total_free < MIN_TOTAL_VRAM_MB:
-        gpu_info = ", ".join(f"{g['name']} (여유 {g['free_mb']}MB)" for g in gpus)
+        gpu_info = ", ".join(f"{g['name']} (free {g['free_mb']}MB)" for g in gpus)
         raise RuntimeError(
-            f"여유 VRAM 부족: GPU {len(gpus)}개에서 여유 {total_free:,}MB.\n"
+            f"Insufficient free VRAM: {total_free:,}MB free across {len(gpus)} GPU(s).\n"
             f"  GPU: {gpu_info}\n"
-            f"  필요량: 여유 ~{MIN_TOTAL_VRAM_MB:,}MB.\n"
+            f"  Required: ~{MIN_TOTAL_VRAM_MB:,}MB free.\n"
             f"\n"
-            f"다른 GPU 프로세스를 종료하여 VRAM을 확보하세요 (nvidia-smi 확인)."
+            f"Stop other GPU processes to free VRAM (check with nvidia-smi)."
         )
 
-    # 각 GPU의 VRAM에 비례하여 tensor_split 구성
+    # Build tensor_split proportional to each GPU's VRAM
     if len(gpus) == 1:
         tensor_split = None
     else:
         total = sum(g["total_mb"] for g in gpus)
         tensor_split = [g["total_mb"] / total for g in gpus]
 
-    # 여유 VRAM에 따라 컨텍스트 크기 조정
+    # Adjust context size based on free VRAM
     headroom = total_free - MIN_TOTAL_VRAM_MB
     if headroom > 12000:
         n_ctx = 32768
@@ -108,13 +108,13 @@ def build_llama_config(gpus: list[dict]) -> dict:
 
 
 def print_gpu_summary(gpus: list[dict]):
-    """GPU 요약 정보를 보기 좋게 출력한다."""
+    """Pretty-print a GPU summary."""
     for i, g in enumerate(gpus):
-        print(f"  GPU {i}: {g['name']} — 총 {g['total_mb']:,}MB, 여유 {g['free_mb']:,}MB")
+        print(f"  GPU {i}: {g['name']} — total {g['total_mb']:,}MB, free {g['free_mb']:,}MB")
 
 
 def format_gpu_info(gpus: list[dict]) -> str:
-    """GPU 정보를 한 줄 문자열로 포맷한다."""
+    """Format GPU info as a single-line string."""
     if not gpus:
         return ""
     parts = []

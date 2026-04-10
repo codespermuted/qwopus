@@ -1,4 +1,4 @@
-"""세션 관리 — 대화 기록 및 영속화."""
+"""Session management — conversation history and persistence."""
 from __future__ import annotations
 
 import json
@@ -9,18 +9,18 @@ from typing import Any
 
 SESSION_DIR = Path.home() / ".qwopus" / "sessions"
 
-# 한국어/영어 혼합 텍스트의 대략적인 문자당 토큰 추정치
+# Rough characters-per-token estimate for mixed English/Korean text
 CHARS_PER_TOKEN = 3
 
 
 @dataclass
 class Session:
-    """대화 기록과 토큰 추적을 관리한다."""
+    """Manages conversation history and token tracking."""
     session_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     messages: list[dict[str, str]] = field(default_factory=list)
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
-    max_context_tokens: int = 14000  # n_ctx 이하로 여유분 확보
+    max_context_tokens: int = 14000  # Stay below n_ctx with some headroom
 
     def add_user_message(self, content: str):
         self.messages.append({"role": "user", "content": content})
@@ -29,11 +29,11 @@ class Session:
         self.messages.append({"role": "assistant", "content": content})
 
     def get_messages_for_context(self, system_prompt: str) -> list[dict]:
-        """LLM에 전달할 메시지 목록을 구성하며, 오래된 메시지를 잘라낸다."""
+        """Build the list of messages to send to the LLM, trimming old ones as needed."""
         system_tokens = self._estimate_tokens(system_prompt)
         budget = self.max_context_tokens - system_tokens
 
-        # 뒤에서부터 역순으로 메시지를 추가하되 예산 초과 시 중단
+        # Walk backwards and add messages until the budget is exhausted
         selected = []
         used = 0
         for msg in reversed(self.messages):
@@ -51,7 +51,7 @@ class Session:
 
     @staticmethod
     def _estimate_tokens(text: str) -> int:
-        """대략적인 토큰 수 추정."""
+        """Rough token count estimate."""
         return max(1, len(text) // CHARS_PER_TOKEN)
 
     def save(self):

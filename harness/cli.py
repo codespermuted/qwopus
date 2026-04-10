@@ -1,4 +1,4 @@
-"""인터랙티브 REPL — 메인 진입점."""
+"""Interactive REPL — main entry point."""
 from __future__ import annotations
 
 import os
@@ -27,36 +27,36 @@ def main():
             resume_id = args[i + 1]
             i += 2
         elif args[i] == "--no-stream":
-            # 스트리밍 비활성화 (디버깅용)
+            # Disable streaming (for debugging)
             os.environ["QWOPUS_NO_STREAM"] = "1"
             i += 1
         else:
             rest_args.append(args[i])
             i += 1
 
-    # 설정 로드
+    # Load settings
     settings = Settings.load()
     if os.environ.get("QWOPUS_NO_STREAM"):
         settings.set("ui.streaming", False)
 
-    # 세션 로드 또는 생성
+    # Load or create a session
     if resume_id:
         session = Session.load(resume_id)
-        ui.print_success(f"세션 재개: {session.session_id}")
+        ui.print_success(f"Resumed session: {session.session_id}")
     else:
         session = Session()
 
     runtime = ConversationRuntime(cwd=cwd, session=session, settings=settings)
 
-    # 원샷 모드
+    # One-shot mode
     if rest_args:
         prompt = " ".join(rest_args)
-        ui.console.print(f"[bold blue]❯[/] {prompt}\n")
+        ui.console.print(f"[bold blue]>[/] {prompt}\n")
         runtime.run_turn(prompt)
         _print_usage(session, settings)
         return
 
-    # 인터랙티브 모드
+    # Interactive mode
     from .gpu import detect_gpus, format_gpu_info
     from .indexer import build_project_index
     gpus = detect_gpus()
@@ -65,9 +65,9 @@ def main():
 
     index = build_project_index(cwd)
     file_count = len([l for l in index.split("\n") if l.strip() and not l.strip().startswith("...")])
-    ui.print_info(f"프로젝트 인덱스: {file_count}개 파일")
+    ui.print_info(f"Project index: {file_count} files")
     stream_status = "on" if settings.get("ui.streaming", True) else "off"
-    ui.print_info(f"스트리밍: {stream_status}")
+    ui.print_info(f"Streaming: {stream_status}")
 
     auto_save = settings.get("session.auto_save_interval", 10)
 
@@ -81,7 +81,7 @@ def main():
         if not user_input:
             continue
 
-        # !셸 명령어
+        # !shell command
         if user_input.startswith("!"):
             cmd = user_input[1:].strip()
             if cmd:
@@ -92,7 +92,7 @@ def main():
                     ui.print_error(str(e))
             continue
 
-        # /슬래시 명령어
+        # /slash command
         if user_input.startswith("/"):
             response = handle_slash_command(user_input, session, cwd)
             if response == "__EXIT__":
@@ -102,14 +102,14 @@ def main():
                 if response:
                     ui.print_command_response(response)
                 continue
-            ui.print_warning(f"알 수 없는 명령어: {user_input.split()[0]}")
+            ui.print_warning(f"Unknown command: {user_input.split()[0]}")
             continue
 
-        # 일반 프롬프트 → 턴 실행
+        # Normal prompt -> run a turn
         result = runtime.run_turn(user_input)
         _print_usage(session, settings)
 
-        # 자동 저장
+        # Auto-save
         if auto_save and len(session.messages) % auto_save == 0:
             session.save()
 

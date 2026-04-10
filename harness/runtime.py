@@ -1,4 +1,4 @@
-"""대화 런타임 — 턴 루프, 도구 디스패치, 훅 실행."""
+"""Conversation runtime — turn loop, tool dispatch, and hook execution."""
 from __future__ import annotations
 
 import json
@@ -57,16 +57,16 @@ When you are done and have no more tools to call, just respond with normal text.
 
 ## Focus
 - Match the scope of your action to what was asked:
-  - "설명해줘" / "explain" → read and explain only, do NOT create or modify files.
-  - "만들어줘" / "create" / "build" → you CAN proactively create files and code.
-  - "고쳐줘" / "fix" → read, diagnose, then fix.
+  - "explain" → read and explain only, do NOT create or modify files.
+  - "create" / "build" → you CAN proactively create files and code.
+  - "fix" → read, diagnose, then fix.
 - When reading the codebase, read only the files you need. Don't read every single file.
 - Stay on topic. If the user asks about X, don't start building Y.
 - Be concise. Lead with the answer, not the reasoning.
 
 ## Proactivity
 - You CAN suggest useful improvements, tools, or features if they are relevant.
-- You CAN create files when the user's request implies it (e.g. "이거 추가해줘").
+- You CAN create files when the user's request implies it.
 - But always make sure your suggestion is relevant to what the user is working on.
 
 ## Safety
@@ -74,7 +74,7 @@ When you are done and have no more tools to call, just respond with normal text.
 - Do NOT include internal reasoning ("The user wants...", "Let me think...") in your response.
 """
 
-# ```tool ... ``` 블록 추출 정규식
+# Regex for extracting ```tool ... ``` blocks
 TOOL_BLOCK_RE = re.compile(r"```tool\s*\n(\{.*?\})\s*\n```", re.DOTALL)
 
 
@@ -90,13 +90,13 @@ def build_system_prompt(cwd: str) -> str:
 
 
 def parse_tool_calls(text: str) -> list[ToolCall]:
-    """LLM 응답에서 도구 호출을 추출한다."""
+    """Extract tool calls from an LLM response."""
     calls = []
     for match in TOOL_BLOCK_RE.finditer(text):
         tc = _try_parse_tool_json(match.group(1))
         if tc:
             calls.append(tc)
-    # fallback: ```tool 없이 JSON만 있는 경우
+    # Fallback: bare JSON without a ```tool block
     if not calls:
         for match in re.finditer(r'\{\s*"tool"\s*:\s*"(\w+)".*?\}', text, re.DOTALL):
             tc = _try_parse_tool_json(match.group(0))
@@ -122,7 +122,7 @@ def strip_tool_blocks(text: str) -> str:
 
 
 class ConversationRuntime:
-    """대화 루프 관리: 사용자 → LLM → 도구 → LLM → ..."""
+    """Manages the conversation loop: user -> LLM -> tool -> LLM -> ..."""
 
     def __init__(self, cwd: str, session: Session | None = None, settings: Settings | None = None):
         self.cwd = cwd
@@ -135,14 +135,14 @@ class ConversationRuntime:
         self.tool_output_limit = self.settings.get("tools.tool_output_limit", 1500)
 
     def run_turn(self, user_input: str) -> TurnResult:
-        """턴 실행: 사용자 메시지 → 도구 루프 → 최종 응답."""
-        # 컨텍스트 한도를 실제 n_ctx에 맞춤
+        """Run a turn: user message -> tool loop -> final response."""
+        # Align the context limit with the actual n_ctx
         try:
             self.session.max_context_tokens = get_n_ctx() - 2048
         except Exception:
             pass
 
-        # pre_turn 훅
+        # pre_turn hook
         self.hooks.run_pre_turn(user_input)
 
         self.session.add_user_message(user_input)
@@ -155,71 +155,71 @@ class ConversationRuntime:
         for round_idx in range(self.max_tool_rounds):
             messages = self.session.get_messages_for_context(self.system_prompt)
 
-            # LLM 추론 — 스트리밍 또는 배치
+            # LLM inference — streaming or batch
             if self.use_streaming:
                 raw_content = self._run_streaming(messages)
             else:
                 raw_content = self._run_batch(messages)
 
-            # thinking 분리 (스트리밍에서는 UI가 이미 표시함)
+            # Separate out thinking (in streaming mode the UI has already shown it)
             thinking, content = strip_thinking(raw_content)
             if thinking and not self.use_streaming and self.settings.get("ui.show_thinking", True):
                 ui.print_thinking(thinking)
 
-            # 도구 호출 파싱
+            # Parse tool calls
             tool_calls = parse_tool_calls(content)
             display_text = strip_tool_blocks(content)
 
             if display_text:
                 final_text += display_text + "\n"
 
-            # 도구 호출 없으면 턴 완료
+            # No tool calls means the turn is done
             if not tool_calls:
-                # 배치 모드에서만 패널 출력 (스트리밍은 이미 실시간 출력됨)
+                # Only the batch mode needs a panel (streaming already printed live)
                 if display_text and not self.use_streaming:
                     ui.print_response(display_text)
                 self.session.add_assistant_message(content)
                 self.hooks.run_post_turn(final_text)
                 return self._build_result(user_input, final_text, all_tool_calls, all_tool_results, "completed")
 
-            # 반복 감지
+            # Loop detection
             current_sig = str([(tc.name, tc.arguments) for tc in tool_calls])
             if current_sig == prev_tool_sig:
-                ui.print_warning("동일한 도구 호출 반복 감지 — 루프 종료")
+                ui.print_warning("Detected repeated identical tool calls — exiting loop")
                 if display_text and not self.use_streaming:
                     ui.print_response(display_text)
                 self.session.add_assistant_message(content)
                 return self._build_result(user_input, final_text, all_tool_calls, all_tool_results, "completed")
             prev_tool_sig = current_sig
 
-            # 도구 실행
+            # Execute tools
             tool_output_parts = []
             for tc in tool_calls:
                 summary = _summarize_args(tc)
                 ui.print_tool_call(tc.name, summary)
 
-                # pre_tool 훅
+                # pre_tool hook
                 hook_result = self.hooks.run_pre_tool(tc.name, tc.arguments)
                 if hook_result == "BLOCK":
-                    ui.print_warning(f"훅에 의해 차단됨: {tc.name}")
-                    result = ToolResult(name=tc.name, output="훅에 의해 차단됨", success=False)
+                    ui.print_warning(f"Blocked by hook: {tc.name}")
+                    result = ToolResult(name=tc.name, output="Blocked by hook", success=False)
                 else:
                     with ui.tool_spinner(tc.name, summary):
                         result = execute_tool(tc, self.cwd, ui.confirm)
 
-                    # post_tool 훅
+                    # post_tool hook
                     self.hooks.run_post_tool(tc.name, result.output, result.success)
 
                 all_tool_calls.append(tc)
                 all_tool_results.append(result)
                 ui.print_tool_result(tc.name, result.output, result.success)
 
-                # 컨텍스트 절약용 truncation
+                # Truncate for context savings
                 output_for_ctx = result.output
                 if len(output_for_ctx) > self.tool_output_limit:
                     output_for_ctx = (
                         output_for_ctx[:self.tool_output_limit - 500]
-                        + "\n\n... (잘림) ...\n\n"
+                        + "\n\n... (truncated) ...\n\n"
                         + output_for_ctx[-400:]
                     )
                 tool_output_parts.append(f"[Tool Result: {result.name}]\n{output_for_ctx}")
@@ -227,12 +227,12 @@ class ConversationRuntime:
             self.session.add_assistant_message(content)
             self.session.add_user_message("Tool results:\n\n" + "\n\n".join(tool_output_parts))
 
-        ui.print_warning("최대 도구 라운드 도달")
+        ui.print_warning("Reached maximum tool rounds")
         self.session.add_assistant_message("(max tool rounds reached)")
         return self._build_result(user_input, final_text, all_tool_calls, all_tool_results, "max_turns")
 
     def _run_streaming(self, messages: list[dict]) -> str:
-        """스트리밍 모드로 LLM 추론 실행."""
+        """Run LLM inference in streaming mode."""
         max_tokens = self.settings.get("model.max_tokens", 4096)
         temperature = self.settings.get("model.temperature", 0.3)
         token_iter = chat_completion_stream(messages, max_tokens=max_tokens, temperature=temperature)
@@ -240,7 +240,7 @@ class ConversationRuntime:
         return raw
 
     def _run_batch(self, messages: list[dict]) -> str:
-        """배치 모드로 LLM 추론 실행."""
+        """Run LLM inference in batch mode."""
         max_tokens = self.settings.get("model.max_tokens", 4096)
         temperature = self.settings.get("model.temperature", 0.3)
         with ui.tool_spinner("model", "thinking..."):

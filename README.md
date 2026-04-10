@@ -1,105 +1,105 @@
 # 🐙 Qwopus
 
-**로컬 AI 코딩 에이전트** — Qwen3.5-27B 기반, Claude 4.6 Opus reasoning knowledge distillation 모델
+**Local AI coding agent** — built on Qwen3.5-27B, a Claude 4.6 Opus reasoning knowledge-distillation model.
 ---
 
-## 설치
+## Installation
 
 ```bash
-# 1. Qwopus 설치
+# 1. Install Qwopus
 pip install git+https://github.com/codespermuted/qwopus.git
 
-# 2. llama-cpp-python CUDA 빌드 (GPU 가속 필수)
+# 2. Build llama-cpp-python with CUDA (required for GPU acceleration)
 CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --force-reinstall --no-cache-dir
 ```
 
-모델(~19.4GB)은 첫 실행 시 자동 다운로드됩니다.
+The model (~19.4GB) is downloaded automatically on first run.
 
-## 시스템 요구사항
+## System Requirements
 
-- **GPU**: NVIDIA, 총 VRAM **18GB 이상** (예: RTX 3090, 4090, 5060 Ti x2 등)
+- **GPU**: NVIDIA, **18GB+ total VRAM** (e.g. RTX 3090, 4090, dual 5060 Ti, etc.)
 - **CUDA**: 12.0+
 - **Python**: 3.10+
 - **OS**: Linux
 
-GPU는 자동 감지되며, VRAM 부족 시 안내 메시지가 나옵니다.
+GPUs are auto-detected, and you'll see a clear message if VRAM is insufficient.
 
 ---
 
-## 사용법
+## Usage
 
 ```bash
-# 아무 프로젝트 폴더에서 실행
+# Run inside any project folder
 cd your-project/
 qwopus
 
-# 원샷 모드
-qwopus "이 프로젝트 구조 설명해줘"
+# One-shot mode
+qwopus "Explain the structure of this project"
 
-# 작업 디렉토리 지정
+# Specify a working directory
 qwopus --cwd /path/to/project
 ```
 
-### 명령어
+### Commands
 
-`/help`로 전체 목록 확인 가능
+Run `/help` to see the full list.
 
-| 명령어 | 설명 |
-|--------|------|
-| `/help` | 도움말 |
-| `/status` | 세션 정보 |
-| `/clear` | 대화 초기화 |
-| `/save` | 세션 저장 |
-| `/resume <id>` | 세션 재개 |
-| `/quit` | 종료 |
-| `!명령어` | 셸 명령어 직접 실행 |
+| Command | Description |
+|---------|-------------|
+| `/help` | Show help |
+| `/status` | Session info |
+| `/clear` | Reset the conversation |
+| `/save` | Save the session |
+| `/resume <id>` | Resume a session |
+| `/quit` | Exit |
+| `!command` | Run a shell command directly |
 
-### 도구
+### Tools
 
-Qwopus가 자율적으로 사용하는 도구:
+Tools Qwopus uses autonomously:
 
 **Bash** · **FileRead** · **FileWrite** · **FileEdit** · **Glob** · **Grep**
 
 ---
 
-## 동작 원리
+## How It Works
 
 ```
-사용자 입력 → LLM 추론 → 도구 호출 → 결과 반영 → 재추론 → 답변
+User input → LLM reasoning → Tool call → Feed result back → Re-reason → Answer
 ```
 
-- 로컬 GPU에서 llama.cpp로 추론
-- 멀티 GPU 자동 분할
-- 위험 명령은 사용자 확인 필요
-- 동일 도구 반복 호출 시 자동 중단 (hallucination 방지)
+- Local GPU inference via llama.cpp
+- Automatic multi-GPU sharding
+- Dangerous commands require user confirmation
+- Repeated identical tool calls are auto-stopped (hallucination guard)
 
 ---
 
-## 출처 및 크레딧
+## Credits
 
-### 모델
+### Model
 - **[Qwen3.5-27B](https://huggingface.co/Qwen/Qwen3-27B)** — Qwen Team (Alibaba) · Apache 2.0
-- **[GGUF 양자화](https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF)** — mradermacher
+- **[GGUF quantization](https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF)** — mradermacher
 
-### 추론 엔진
+### Inference Engine
 - **[llama.cpp](https://github.com/ggml-org/llama.cpp)** — Georgi Gerganov · MIT
 - **[llama-cpp-python](https://github.com/abetlen/llama-cpp-python)** — Andrei Betlen · MIT
 
-### 아키텍처 참고
+### Architectural References
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — Anthropic
 - **[Claw Code](https://github.com/instructkr/claw-code)** — instructkr
 
-### 기타
+### Other
 - **[Rich](https://github.com/Textualize/rich)** · **[prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit)** · **[Hugging Face Hub](https://github.com/huggingface/huggingface_hub)**
 
 ---
 
-## 면책 사항
+## Disclaimer
 
-- Anthropic, Alibaba/Qwen과 **무관한 개인 프로젝트**입니다.
-- Claude Code 소스를 직접 복사하지 않았으며, 공개된 아키텍처 패턴을 참고하여 독립 구현했습니다.
-- 모델 출력은 항상 검증이 필요하며, 프로덕션 사용은 사용자 책임입니다.
+- This is a **personal project** unaffiliated with Anthropic or Alibaba/Qwen.
+- No Claude Code source code was copied; the architecture was independently implemented based on publicly documented patterns.
+- Model output always requires verification. Production use is at the user's own risk.
 
-## 라이선스
+## License
 
 MIT — [LICENSE](LICENSE)

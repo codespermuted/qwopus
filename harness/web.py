@@ -1,4 +1,4 @@
-"""웹 도구 — 검색 및 페이지 크롤링."""
+"""Web tools — search and page fetching."""
 from __future__ import annotations
 
 import logging
@@ -7,10 +7,10 @@ import unicodedata
 
 logger = logging.getLogger(__name__)
 
-# CJK 문자 비율이 이 이상이면 필터링 (중국어/일본어 결과 제외)
+# If the CJK character ratio exceeds this, the result is filtered out (drop Chinese/Japanese results)
 CJK_THRESHOLD = 0.3
 
-# 신뢰도 낮은 도메인 (검색 노이즈가 많은 사이트)
+# Low-quality domains (sites that tend to be search noise)
 LOW_QUALITY_DOMAINS = {
     "zhihu.com", "baidu.com", "zhidao.baidu.com",
     "csdn.net", "jianshu.com", "163.com",
@@ -18,16 +18,16 @@ LOW_QUALITY_DOMAINS = {
 
 
 def web_search(query: str, max_results: int = 5) -> str:
-    """웹 검색: DuckDuckGo → 필터링 → 영어/한국어 결과 반환."""
+    """Web search: DuckDuckGo -> filter -> return English/Korean results."""
     raw_results = _ddg_search(query, max_results * 3)
 
     if not raw_results:
-        return "검색 결과가 없습니다."
+        return "No search results."
 
-    # 1차: CJK 비율 + 저품질 도메인 필터링
+    # Pass 1: filter by CJK ratio and low-quality domains
     filtered = _filter_results(raw_results, max_results)
 
-    # 2차: 영어 결과 부족 시 영어권 사이트로 재검색
+    # Pass 2: if there aren't enough English results, retry against English-language sites
     if len(filtered) < max_results:
         site_query = query + " site:github.com OR site:stackoverflow.com OR site:medium.com OR site:dev.to"
         extra = _ddg_search(site_query, max_results)
@@ -52,7 +52,7 @@ def web_search(query: str, max_results: int = 5) -> str:
 
 
 def _ddg_search(query: str, max_results: int) -> list[dict]:
-    """DuckDuckGo 검색 실행."""
+    """Run a DuckDuckGo search."""
     try:
         from duckduckgo_search import DDGS
     except ImportError:
@@ -68,7 +68,7 @@ def _ddg_search(query: str, max_results: int) -> list[dict]:
 
 
 def _filter_results(results: list[dict], limit: int) -> list[dict]:
-    """CJK 비율 높은 결과 + 저품질 도메인 제외."""
+    """Drop results with a high CJK ratio or from low-quality domains."""
     filtered = []
     for r in results:
         title = r.get("title", "")
@@ -87,7 +87,7 @@ def _filter_results(results: list[dict], limit: int) -> list[dict]:
 
 
 def web_fetch(url: str) -> str:
-    """URL의 본문 텍스트를 추출한다. HTML → 정리된 텍스트."""
+    """Extract body text from a URL. HTML -> cleaned text."""
     import requests
     from bs4 import BeautifulSoup
 
@@ -103,19 +103,19 @@ def web_fetch(url: str) -> str:
         )
         resp.raise_for_status()
     except requests.RequestException as e:
-        return f"페이지 가져오기 실패: {e}"
+        return f"Failed to fetch page: {e}"
 
     content_type = resp.headers.get("content-type", "")
     if "text/html" not in content_type and "text/plain" not in content_type:
-        return f"지원하지 않는 콘텐츠 타입: {content_type}"
+        return f"Unsupported content type: {content_type}"
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # 불필요한 요소 제거
+    # Strip unwanted elements
     for tag in soup(["script", "style", "nav", "footer", "header", "aside", "iframe", "noscript"]):
         tag.decompose()
 
-    # 본문 추출 (article > main > body 순서로 시도)
+    # Extract the body (try article > main > body in order)
     main_content = (
         soup.find("article")
         or soup.find("main")
@@ -125,32 +125,32 @@ def web_fetch(url: str) -> str:
     )
 
     if not main_content:
-        return "페이지에서 본문을 추출할 수 없습니다."
+        return "Could not extract body text from the page."
 
     text = main_content.get_text(separator="\n", strip=True)
 
-    # 빈 줄 정리
+    # Clean up blank lines
     lines = [line.strip() for line in text.split("\n") if line.strip()]
     text = "\n".join(lines)
 
-    # 길이 제한 (컨텍스트 절약)
+    # Cap the length (context savings)
     if len(text) > 4000:
-        text = text[:3500] + "\n\n... (잘림, 전체 페이지가 더 김)"
+        text = text[:3500] + "\n\n... (truncated, the full page is longer)"
 
     return text
 
 
 def _cjk_ratio(text: str) -> float:
-    """텍스트에서 CJK (중국어/일본어/한자) 문자의 비율을 계산한다. 한국어는 제외."""
+    """Compute the ratio of CJK (Chinese/Japanese/Han) characters in the text. Korean is excluded."""
     if not text:
         return 0.0
     cjk_count = 0
     total = 0
     for ch in text:
         cat = unicodedata.category(ch)
-        if cat.startswith("L"):  # 문자만 카운트
+        if cat.startswith("L"):  # Count letters only
             total += 1
-            # CJK Unified Ideographs (한자) — 한국어 한글은 제외
+            # CJK Unified Ideographs (Han) — Korean Hangul is excluded
             cp = ord(ch)
             if (0x4E00 <= cp <= 0x9FFF       # CJK Unified
                 or 0x3400 <= cp <= 0x4DBF    # CJK Extension A

@@ -1,11 +1,11 @@
 """
 Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled (Q5_K_M GGUF)
-RTX 5060 Ti x2 (16GB each) 멀티GPU 추론 스크립트
+Multi-GPU inference script for RTX 5060 Ti x2 (16GB each)
 
-사전 설치:
+Prerequisites:
   pip install huggingface_hub llama-cpp-python --break-system-packages
 
-  # CUDA 빌드가 필요 (llama-cpp-python GPU 가속):
+  # Requires a CUDA build (llama-cpp-python GPU acceleration):
   CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --force-reinstall --no-cache-dir --break-system-packages
 """
 
@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 
 # ──────────────────────────────────────────────
-# 1. 모델 다운로드 (최초 1회만 실행됨)
+# 1. Model download (runs only on first invocation)
 # ──────────────────────────────────────────────
 MODEL_REPO = "mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF"
 MODEL_FILE = "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.Q5_K_M.gguf"
@@ -28,46 +28,46 @@ def download_model() -> str:
     local_path = MODEL_DIR / MODEL_FILE
 
     if local_path.exists():
-        print(f"✅ 모델이 이미 존재합니다: {local_path}")
+        print(f"Model already exists: {local_path}")
         return str(local_path)
 
-    print(f"⬇️  모델 다운로드 중... ({MODEL_REPO}/{MODEL_FILE})")
-    print("   Q5_K_M ≈ 19.4GB — 네트워크 상태에 따라 시간이 걸릴 수 있습니다.")
+    print(f"Downloading model... ({MODEL_REPO}/{MODEL_FILE})")
+    print("   Q5_K_M ~19.4GB — this may take a while depending on your connection.")
     path = hf_hub_download(
         repo_id=MODEL_REPO,
         filename=MODEL_FILE,
         local_dir=str(MODEL_DIR),
         local_dir_use_symlinks=False,
     )
-    print(f"✅ 다운로드 완료: {path}")
+    print(f"Download complete: {path}")
     return path
 
 
 # ──────────────────────────────────────────────
-# 2. 모델 로드 (듀얼 GPU 설정)
+# 2. Load the model (dual GPU configuration)
 # ──────────────────────────────────────────────
 def load_model(model_path: str):
     from llama_cpp import Llama
 
-    print("🚀 모델 로딩 중 (2x RTX 5060 Ti 분할)...")
+    print("Loading model (split across 2x RTX 5060 Ti)...")
     llm = Llama(
         model_path=model_path,
-        n_gpu_layers=-1,           # 전체 레이어 GPU 오프로드
-        n_ctx=8192,                # 컨텍스트 길이 (VRAM 여유에 따라 조정)
-        n_batch=512,               # 배치 크기
-        tensor_split=[0.5, 0.5],   # GPU 0, GPU 1 균등 분할
-        flash_attn=True,           # Flash Attention 활성화
+        n_gpu_layers=-1,           # Offload all layers to GPU
+        n_ctx=8192,                # Context length (tune based on VRAM headroom)
+        n_batch=512,               # Batch size
+        tensor_split=[0.5, 0.5],   # Even split across GPU 0 and GPU 1
+        flash_attn=True,           # Enable Flash Attention
         verbose=False,
     )
-    print("✅ 모델 로드 완료!")
+    print("Model loaded.")
     return llm
 
 
 # ──────────────────────────────────────────────
-# 3. 채팅 함수
+# 3. Chat function
 # ──────────────────────────────────────────────
 def chat(llm, user_message: str, system_prompt: str = None, enable_thinking: bool = True):
-    """단일 턴 채팅. thinking 모드 지원."""
+    """Single-turn chat. Supports thinking mode."""
 
     messages = []
     if system_prompt:
@@ -79,7 +79,7 @@ def chat(llm, user_message: str, system_prompt: str = None, enable_thinking: boo
         max_tokens=4096,
         temperature=0.7,
         top_p=0.9,
-        # Qwen3.5 thinking 모드: <think>...</think> 후 답변 생성
+        # Qwen3.5 thinking mode: produces <think>...</think> before the answer
     )
 
     assistant_msg = response["choices"][0]["message"]["content"]
@@ -87,7 +87,7 @@ def chat(llm, user_message: str, system_prompt: str = None, enable_thinking: boo
 
 
 def parse_thinking(response: str) -> tuple[str, str]:
-    """<think>...</think> 블록과 최종 답변을 분리"""
+    """Split out the <think>...</think> block from the final answer."""
     if "<think>" in response and "</think>" in response:
         think_start = response.index("<think>") + len("<think>")
         think_end = response.index("</think>")
@@ -98,49 +98,49 @@ def parse_thinking(response: str) -> tuple[str, str]:
 
 
 # ──────────────────────────────────────────────
-# 4. 인터랙티브 채팅 루프
+# 4. Interactive chat loop
 # ──────────────────────────────────────────────
 def interactive_chat(llm):
     system_prompt = "You are a helpful assistant. Think step by step."
     history = []
 
     print("\n" + "=" * 60)
-    print("🤖 Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled")
+    print("Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled")
     print("   Q5_K_M | 2x RTX 5060 Ti")
     print("=" * 60)
-    print("명령어: /quit (종료) | /clear (대화 초기화) | /think off|on (사고과정 표시)")
+    print("Commands: /quit (exit) | /clear (reset chat) | /think off|on (toggle thinking)")
     print("=" * 60 + "\n")
 
     show_thinking = True
 
     while True:
         try:
-            user_input = input("👤 You: ").strip()
+            user_input = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\n👋 종료합니다.")
+            print("\nGoodbye.")
             break
 
         if not user_input:
             continue
         if user_input == "/quit":
-            print("👋 종료합니다.")
+            print("Goodbye.")
             break
         if user_input == "/clear":
             history.clear()
-            print("🗑️  대화 기록 초기화됨.\n")
+            print("Conversation cleared.\n")
             continue
         if user_input.startswith("/think"):
             arg = user_input.split()[-1] if len(user_input.split()) > 1 else ""
             show_thinking = arg != "off"
-            print(f"💭 사고과정 표시: {'ON' if show_thinking else 'OFF'}\n")
+            print(f"Thinking display: {'ON' if show_thinking else 'OFF'}\n")
             continue
 
-        # 멀티턴 히스토리 구성
+        # Build multi-turn history
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(history)
         messages.append({"role": "user", "content": user_input})
 
-        print("🤔 생성 중...", end="", flush=True)
+        print("Generating...", end="", flush=True)
 
         response = llm.create_chat_completion(
             messages=messages,
@@ -152,35 +152,35 @@ def interactive_chat(llm):
         assistant_msg = response["choices"][0]["message"]["content"]
         thinking, answer = parse_thinking(assistant_msg)
 
-        print("\r" + " " * 20 + "\r", end="")  # "생성 중..." 지우기
+        print("\r" + " " * 20 + "\r", end="")  # Clear the "Generating..." line
 
         if thinking and show_thinking:
-            print(f"💭 Thinking:\n{thinking}\n")
-        print(f"🤖 Assistant: {answer}\n")
+            print(f"Thinking:\n{thinking}\n")
+        print(f"Assistant: {answer}\n")
 
-        # 히스토리에는 최종 답변만 저장 (모델 카드 권장사항)
+        # Store only the final answer in history (per the model card recommendation)
         history.append({"role": "user", "content": user_input})
         history.append({"role": "assistant", "content": answer})
 
-        # 히스토리가 너무 길면 오래된 것 제거 (컨텍스트 관리)
+        # Drop old messages if the history gets too long (context management)
         if len(history) > 20:
             history = history[-16:]
 
 
 # ──────────────────────────────────────────────
-# 5. 단발성 추론 예시 (스크립트 용도)
+# 5. One-shot inference example (for scripting)
 # ──────────────────────────────────────────────
 def single_inference_example(llm):
-    """단발성 추론 예시 — 스크립트에서 바로 사용 가능"""
-    prompt = "대한민국의 에너지 전환 정책에서 VPP(가상발전소)의 역할과 향후 전망을 분석해줘."
+    """One-shot inference example — usable directly from a script."""
+    prompt = "Analyze the role of VPPs (virtual power plants) in South Korea's energy transition policy and the outlook for their future."
 
-    print(f"📝 Prompt: {prompt}\n")
+    print(f"Prompt: {prompt}\n")
     response = chat(llm, prompt, system_prompt="You are a helpful energy domain expert.")
     thinking, answer = parse_thinking(response)
 
     if thinking:
-        print(f"💭 Thinking:\n{thinking}\n")
-    print(f"🤖 Answer:\n{answer}")
+        print(f"Thinking:\n{thinking}\n")
+    print(f"Answer:\n{answer}")
 
 
 # ──────────────────────────────────────────────

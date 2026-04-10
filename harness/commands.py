@@ -65,7 +65,7 @@ def handle_slash_command(cmd: str, session: Session, cwd: str) -> str | None:
 
     elif command == "/compact":
         before = len(session.messages)
-        # 최근 10개 메시지만 유지
+        # Keep only the most recent 10 messages
         if len(session.messages) > 10:
             session.messages = session.messages[-10:]
         ui.print_info(f"Compacted: {before} → {len(session.messages)} messages")

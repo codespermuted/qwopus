@@ -1,4 +1,4 @@
-"""훅 시스템 — 도구 실행 전/후 자동 동작."""
+"""Hook system — automatic actions before/after tool execution."""
 from __future__ import annotations
 
 import logging
@@ -11,41 +11,41 @@ logger = logging.getLogger(__name__)
 
 
 class HookRunner:
-    """설정에 정의된 훅을 실행한다."""
+    """Runs the hooks defined in settings."""
 
     def __init__(self, settings: Settings, cwd: str):
         self.settings = settings
         self.cwd = cwd
 
     def run_pre_tool(self, tool_name: str, arguments: dict[str, Any]) -> str | None:
-        """도구 실행 전 훅. 출력이 있으면 반환, 차단 시 'BLOCK' 반환."""
+        """Pre-tool hook. Returns output if any, or 'BLOCK' to block execution."""
         hooks = self.settings.get("hooks.pre_tool", [])
         return self._run_hooks(hooks, tool_name=tool_name, arguments=arguments)
 
     def run_post_tool(self, tool_name: str, output: str, success: bool) -> str | None:
-        """도구 실행 후 훅. 출력이 있으면 반환."""
+        """Post-tool hook. Returns output if any."""
         hooks = self.settings.get("hooks.post_tool", [])
         return self._run_hooks(hooks, tool_name=tool_name, output=output[:500], success=success)
 
     def run_pre_turn(self, user_input: str) -> str | None:
-        """턴 시작 전 훅."""
+        """Hook that runs before a turn starts."""
         hooks = self.settings.get("hooks.pre_turn", [])
         return self._run_hooks(hooks, user_input=user_input)
 
     def run_post_turn(self, response: str) -> str | None:
-        """턴 완료 후 훅."""
+        """Hook that runs after a turn finishes."""
         hooks = self.settings.get("hooks.post_turn", [])
         return self._run_hooks(hooks, response=response[:500])
 
     def _run_hooks(self, hooks: list[str], **context) -> str | None:
-        """훅 명령어 목록을 실행한다."""
+        """Run a list of hook commands."""
         if not hooks:
             return None
 
         outputs = []
         for hook_cmd in hooks:
             try:
-                # 컨텍스트 변수를 명령어에 치환
+                # Substitute context variables into the command
                 cmd = hook_cmd.format(**context)
                 result = subprocess.run(
                     cmd, shell=True, capture_output=True, text=True,
@@ -53,15 +53,15 @@ class HookRunner:
                 )
                 if result.stdout.strip():
                     outputs.append(result.stdout.strip())
-                # BLOCK 반환으로 도구 실행 차단 가능
+                # Returning BLOCK can block tool execution
                 if result.stdout.strip() == "BLOCK":
                     return "BLOCK"
             except subprocess.TimeoutExpired:
-                logger.warning("훅 타임아웃: %s", hook_cmd)
+                logger.warning("Hook timed out: %s", hook_cmd)
             except (KeyError, ValueError) as e:
-                # format 실패 — 변수가 없는 경우 무시
-                logger.debug("훅 변수 치환 실패: %s — %s", hook_cmd, e)
+                # format failed — ignore when a variable is missing
+                logger.debug("Hook variable substitution failed: %s — %s", hook_cmd, e)
             except Exception as e:
-                logger.warning("훅 실행 실패: %s — %s", hook_cmd, e)
+                logger.warning("Hook execution failed: %s — %s", hook_cmd, e)
 
         return "\n".join(outputs) if outputs else None

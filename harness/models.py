@@ -1,4 +1,4 @@
-"""하네스의 핵심 데이터 모델."""
+"""Core data models for the harness."""
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
@@ -6,7 +6,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class ToolDefinition:
-    """LLM이 호출할 수 있는 도구 정의."""
+    """Definition of a tool the LLM can call."""
     name: str
     description: str
     parameters: dict[str, Any] = field(default_factory=dict)
@@ -14,14 +14,14 @@ class ToolDefinition:
 
 @dataclass(frozen=True)
 class ToolCall:
-    """LLM 출력에서 파싱된 도구 호출."""
+    """A tool call parsed from the LLM output."""
     name: str
     arguments: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class ToolResult:
-    """도구 실행 결과."""
+    """Result of executing a tool."""
     name: str
     output: str
     success: bool = True
@@ -29,7 +29,7 @@ class ToolResult:
 
 @dataclass
 class UsageSummary:
-    """토큰 사용량 추적."""
+    """Tracks token usage."""
     prompt_tokens: int = 0
     completion_tokens: int = 0
 
@@ -40,7 +40,7 @@ class UsageSummary:
 
 @dataclass
 class TurnResult:
-    """대화 한 턴의 결과."""
+    """Result of a single conversation turn."""
     user_prompt: str
     assistant_response: str
     tool_calls: list[ToolCall] = field(default_factory=list)
@@ -51,6 +51,6 @@ class TurnResult:
 
 @dataclass(frozen=True)
 class PermissionDenial:
-    """거부된 도구 호출."""
+    """A denied tool call."""
     tool_name: str
     reason: str

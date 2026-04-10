@@ -1,4 +1,4 @@
-"""설정 관리 — ~/.qwopus/settings.json 로드 및 기본값."""
+"""Settings management — loads ~/.qwopus/settings.json with defaults."""
 from __future__ import annotations
 
 import json
@@ -12,40 +12,40 @@ logger = logging.getLogger(__name__)
 CONFIG_DIR = Path.home() / ".qwopus"
 SETTINGS_PATH = CONFIG_DIR / "settings.json"
 
-# 기본 설정
+# Default settings
 DEFAULTS: dict[str, Any] = {
-    # 모델 설정
+    # Model settings
     "model": {
         "repo": "mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
         "file": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.Q5_K_M.gguf",
         "temperature": 0.3,
         "max_tokens": 4096,
     },
-    # 도구 설정
+    # Tool settings
     "tools": {
         "max_tool_rounds": 8,
         "tool_output_limit": 1500,
         "bash_timeout": 120,
     },
-    # 세션 설정
+    # Session settings
     "session": {
         "auto_save_interval": 10,
         "max_history_messages": 60,
     },
-    # 권한 설정
+    # Permission settings
     "permissions": {
-        "auto_allow": [],          # 확인 없이 허용할 도구 (예: ["Glob", "Grep"])
-        "deny": [],                # 차단할 도구
-        "confirm_dangerous": True,  # 위험 명령 확인 여부
+        "auto_allow": [],          # Tools auto-allowed without confirmation (e.g. ["Glob", "Grep"])
+        "deny": [],                # Tools to block
+        "confirm_dangerous": True,  # Whether to confirm dangerous commands
     },
-    # 훅 설정
+    # Hook settings
     "hooks": {
-        "pre_tool": [],   # 도구 실행 전 셸 명령어 (예: ["echo 'running {tool}'"])
-        "post_tool": [],  # 도구 실행 후 셸 명령어
-        "pre_turn": [],   # 턴 시작 전
-        "post_turn": [],  # 턴 완료 후
+        "pre_tool": [],   # Shell commands run before a tool (e.g. ["echo 'running {tool}'"])
+        "post_tool": [],  # Shell commands run after a tool
+        "pre_turn": [],   # Before a turn starts
+        "post_turn": [],  # After a turn finishes
     },
-    # UI 설정
+    # UI settings
     "ui": {
         "show_thinking": True,
         "show_token_usage": True,
@@ -56,11 +56,11 @@ DEFAULTS: dict[str, Any] = {
 
 @dataclass
 class Settings:
-    """사용자 설정을 관리한다."""
+    """Manages user settings."""
     data: dict[str, Any] = field(default_factory=dict)
 
     def get(self, dotpath: str, default=None):
-        """점(.) 구분 경로로 설정값을 가져온다. 예: 'model.temperature'"""
+        """Get a setting using a dot-delimited path, e.g. 'model.temperature'."""
         keys = dotpath.split(".")
         obj = self.data
         for key in keys:
@@ -71,7 +71,7 @@ class Settings:
         return obj
 
     def set(self, dotpath: str, value):
-        """점 구분 경로로 설정값을 저장한다."""
+        """Set a setting using a dot-delimited path."""
         keys = dotpath.split(".")
         obj = self.data
         for key in keys[:-1]:
@@ -81,13 +81,13 @@ class Settings:
         obj[keys[-1]] = value
 
     def save(self):
-        """설정을 파일에 저장한다."""
+        """Save settings to file."""
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         SETTINGS_PATH.write_text(json.dumps(self.data, ensure_ascii=False, indent=2))
 
     @classmethod
     def load(cls) -> Settings:
-        """설정 파일을 로드한다. 없으면 기본값으로 생성."""
+        """Load the settings file. Creates defaults if none exists."""
         data = _deep_copy(DEFAULTS)
 
         if SETTINGS_PATH.exists():
@@ -95,9 +95,9 @@ class Settings:
                 user_data = json.loads(SETTINGS_PATH.read_text())
                 _deep_merge(data, user_data)
             except (json.JSONDecodeError, OSError) as e:
-                logger.warning("설정 파일 로드 실패: %s — 기본값 사용", e)
+                logger.warning("Failed to load settings file: %s — using defaults", e)
         else:
-            # 기본 설정 파일 생성
+            # Create default settings file
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
             SETTINGS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2))
 
@@ -105,7 +105,7 @@ class Settings:
 
 
 def _deep_merge(base: dict, override: dict):
-    """override의 값을 base에 깊은 병합한다."""
+    """Deep-merge the values of override into base."""
     for key, value in override.items():
         if key in base and isinstance(base[key], dict) and isinstance(value, dict):
             _deep_merge(base[key], value)
